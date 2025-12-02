@@ -35,26 +35,26 @@ public class ReportDatabase {
         stmt.close();
     }
 
-    public void addReport(Report report) {
+    public void addReport(Report report) throws SQLException {
             String sql = """
             INSERT INTO encrypted_reports 
             (report_id, timestamp, author, encrypted_content)
             VALUES (?, ?, ?, ?)
         """;
 
-            try {
-                PreparedStatement pstmt = conn.prepareStatement(sql);
+            try (PreparedStatement pstmt = conn.prepareStatement(sql)){
                 pstmt.setString(1, report.getId());
                 pstmt.setString(2, report.getTimestamp());
                 pstmt.setString(3, report.getAuthor());
                 pstmt.setString(4, report.getContent());
+                int rowsAffected = pstmt.executeUpdate();
 
-                pstmt.executeUpdate();
-                pstmt.close();
-            }
-            catch (Exception e) {
-                e.printStackTrace();
-            }
+                if (rowsAffected == 0) {
+                    throw new SQLException("Failed to insert report - no rows affected");
+                }
+            } catch (SQLIntegrityConstraintViolationException e) {
+            throw new SQLException("Report with ID '" + report.getId() + "' already exists", e);
+        }
     }
 
     public Report getReport(String id) {
@@ -64,8 +64,7 @@ public class ReportDatabase {
             WHERE report_id = ?
         """;
 
-        try {
-            PreparedStatement pstmt = conn.prepareStatement(sql);
+        try(PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setString(1, id);
 
             ResultSet rs = pstmt.executeQuery();
@@ -77,7 +76,6 @@ public class ReportDatabase {
                         rs.getString("encrypted_content"));
             }
             rs.close();
-            pstmt.close();
         }
         catch (Exception e) {
             e.printStackTrace();

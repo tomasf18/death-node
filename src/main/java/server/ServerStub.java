@@ -11,8 +11,7 @@ public class ServerStub extends DeathNodeGrpc.DeathNodeImplBase {
 
     private static final ServerApp app = new ServerApp();
 
-    public ServerStub() {
-    }
+    public ServerStub() {}
 
     @Override
     public void createReport(DeathNodeProtoBuf.CreateReportArgs request,
@@ -25,14 +24,21 @@ public class ServerStub extends DeathNodeGrpc.DeathNodeImplBase {
                 report.getAuthor(),
                 report.getContent()
         ));
-        System.out.println("created report → seq=" + sn);
-
-        DeathNodeProtoBuf.CreateReportReply reply = DeathNodeProtoBuf.CreateReportReply.newBuilder()
-                .setAck(Integer.toString(sn))
-                .build();
-
-        responseObserver.onNext(reply);
-        responseObserver.onCompleted();
+        DeathNodeProtoBuf.CreateReportReply reply;
+        if (sn >= 0) {
+            System.out.println("✓ Created report → seq=" + sn);
+            reply = DeathNodeProtoBuf.CreateReportReply.newBuilder()
+                    .setAck(Integer.toString(sn))
+                    .build();
+            responseObserver.onNext(reply);
+            responseObserver.onCompleted();
+        } else {
+            // erro
+            System.err.println("✗ Failed to create report: " + report.getId());
+            responseObserver.onError(
+                    new RuntimeException("Failed to create report: seq=" + sn)
+            );
+        }
     }
 
     @Override
@@ -59,9 +65,7 @@ public class ServerStub extends DeathNodeGrpc.DeathNodeImplBase {
                     .build()
             );
             responseObserver.onNext(reply.build());
-            responseObserver.onCompleted();
         }
-
-
+        responseObserver.onCompleted();
     }
 }

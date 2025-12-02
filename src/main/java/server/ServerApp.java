@@ -25,7 +25,12 @@ public class ServerApp {
 
         // validar
 
-        reportDB.addReport(report);
+
+        try {
+            reportDB.addReport(report);
+        } catch (SQLException e) {
+            return -1;
+        }
         return version.incrementAndGet();
     }
 
@@ -35,7 +40,8 @@ public class ServerApp {
         try {
             it = reportDB.getAllReports();
         } catch (SQLException e) {
-            throw new RuntimeException(e);
+            System.out.println("Listing reports\n" + e.getMessage());
+            return;
         }
         while (it.hasNext()) {
             Report report = it.next();
