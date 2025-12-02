@@ -1,22 +1,14 @@
-# CXX DeathNode / ChainOfProduct / CivicEcho Project Read Me
-
-<!-- this is an instruction line; after you follow the instruction, delete the corresponding line. Do the same for all instruction lines! -->
-
-*(replace CXX above with group identifier, for example, A07 ou T22)*
-
-*(keep only your scenario name and delete the other names)*
+# A53 DeathNode
 
 ## Team
 
-| Number | Name              | User                             | E-mail                              |
-| -------|-------------------|----------------------------------| ------------------------------------|
-| 11111  | Alice Network     | <https://github.com/AliceUser>   | <mailto:alice@tecnico.ulisboa.pt>   |
-| 22222  | Bob Computer      | <https://github.com/BobUser>     | <mailto:bob@tecnico.ulisboa.pt>     |
-| 33333  | Charlie Security  | <https://github.com/CharlieUser> | <mailto:charlie@tecnico.ulisboa.pt> |
+| Number | Name           | User                                      | E-mail                              |
+|--------|----------------|-------------------------------------------| ------------------------------------|
+| 116496 | Guilherme Pais | <https://github.com/Guilherme-Parentesco> | <mailto:guilherme.p.pais@tecnico.ulisboa.pt>   |
+| 116122 | Tomás Santos   | <https://github.com/tomasf18>             | <mailto:bob@tecnico.ulisboa.pt>     |
+| 33333  | Pedro Duarte   | <https://github.com/pedropmad>            | <mailto:charlie@tecnico.ulisboa.pt> |
 
-*(fill table above with team member information)*  
-
-![Alice](img/alice.png) ![Bob](img/bob.png) ![Charlie](img/charlie.png)
+![Guilherme Pais](img/Guilherme.png) ![Bob](img/bob.png) ![Charlie](img/charlie.png)
 
 *(add face photos with 150px height; faces should have similar size and framing)*
 

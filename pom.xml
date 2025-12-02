@@ -3,9 +3,26 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>org.example</groupId>
+    <groupId>A53</groupId>
     <artifactId>DeathNode</artifactId>
     <version>1.0-SNAPSHOT</version>
+
+    <name>DeathNode Secure Reporting Platform</name>
+    <description>Anonymous peer-to-peer reporting system for sensitive information.</description>
+    <url>https://github.com/tecnico-sec/A53-DeathNode</url>
+    <organization>
+        <name>Técnico-SEC / Grupo A53</name>
+        <url>https://github.com/tecnico-sec</url>
+    </organization>
+
+    <developers>
+        <developer>
+            <id>1116496</id>
+            <name>Guilherme Pais</name>
+            <email>guilherme.p.pais@tecnico.ulisboa.pt</email>
+        </developer>
+    </developers>
+
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
@@ -14,6 +31,11 @@
         <protobuf.version>4.28.2</protobuf.version>
     </properties>
     <dependencies>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.17.1</version>
+        </dependency>
         <!-- gRPC runtime -->
         <dependency>
             <groupId>io.grpc</groupId>
