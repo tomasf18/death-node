@@ -17,9 +17,14 @@
 
     <developers>
         <developer>
-            <id>1116496</id>
+            <id>116496</id>
             <name>Guilherme Pais</name>
             <email>guilherme.p.pais@tecnico.ulisboa.pt</email>
+        </developer>
+        <developer>
+            <id>116122</id>
+            <name>Tomás Santos</name>
+            <email>tomas.santos.f@tecnico.ulisboa.pt</email>
         </developer>
     </developers>
 
