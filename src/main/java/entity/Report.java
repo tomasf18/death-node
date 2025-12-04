@@ -1,42 +1,51 @@
 package entity;
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 
 public class Report {
 
-    private String id;
-    private String timestamp;
-    private String author;
-    private String content;
-    private int sn;
+    public static class ReportContent {
+        public String suspect;
+        public String description;
+        public String location;
+
+        public ReportContent() {}
+
+        public ReportContent(String suspect, String description, String location) {
+            this.suspect = suspect;
+            this.description = description;
+            this.location = location;
+        }
+    }
+
+    private final String id;
+    private final String timestamp;
+    private final String author;
+    private final ReportContent content;
+    private final int version;
+    private final String status;
 
 
-    public Report(String id, String timestamp, String author, String content) {
+    public Report(String id, String timestamp, String author, ReportContent content, int version, String status) {
         this.id = id;
         this.timestamp = timestamp;
         this.author = author;
         this.content = content;
+        this.version = version;
+        this.status = status;
     }
 
-    public Report(String id, String author, String content) {
-        this.id = id;
-        this.author = author;
-        this.content = content;
-        this.timestamp = Instant.now().toString();
-    }
-
-    public Report(String author, String content) {
+    public Report(String author, ReportContent content, int version, String status) {
         this.id = UUID.randomUUID().toString();
         this.author = author;
         this.content = content;
         this.timestamp = Instant.now().toString();
+        this.version = version;
+        this.status = status;
     }
 
-    public String getId() {
-        return id;
-    }
+    public String getId() { return id; }
 
     public String getTimestamp() {
         return timestamp;
@@ -46,16 +55,12 @@ public class Report {
         return author;
     }
 
-    public String getContent() {
+    public ReportContent getContent() {
         return content;
     }
 
-    public void setSequenceNumber(int n) {
-        this.sn = n;
-    }
+    public String getStatus() { return status; }
 
-    public int getSequenceNumber() {
-        return sn;
-    }
+    public int getVersion() { return version; }
 
 }

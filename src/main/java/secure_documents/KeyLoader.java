@@ -12,6 +12,8 @@ import java.security.spec.X509EncodedKeySpec;
 
 import javax.crypto.spec.SecretKeySpec;
 
+import jakarta.json.*;
+
 public class KeyLoader {
     private static byte[] readFile(String path) throws IOException {
         FileInputStream fis = new FileInputStream(path);
@@ -34,6 +36,21 @@ public class KeyLoader {
         }
     }
 
+    public static JsonObject readJsonObject(String path) throws IOException {
+        try (FileInputStream fis = new FileInputStream(path);
+             JsonReader reader = Json.createReader(fis)) {
+            return reader.readObject();
+        }
+    }
+
+    public static void writeJsonObject(String path, JsonObject json) throws IOException {
+        try (FileOutputStream fos = new FileOutputStream(path);
+             JsonWriter writer = Json.createWriter(fos)) {
+            writer.writeObject(json);
+        }
+    }
+
+
     public static Key readSecretKey(String secretKeyPath) throws Exception {
         byte[] encoded = readFile(secretKeyPath);
         return new SecretKeySpec(encoded, "AES");
@@ -48,6 +65,7 @@ public class KeyLoader {
     }
 
     public static PrivateKey readPrivateKey(String privateKeyPath) throws Exception {
+        System.out.println("Reading private key from file " + privateKeyPath + " ...");
         byte[] privEncoded = readFile(privateKeyPath);
         PKCS8EncodedKeySpec privSpec = new PKCS8EncodedKeySpec(privEncoded);
         KeyFactory keyFacPriv = KeyFactory.getInstance("RSA");

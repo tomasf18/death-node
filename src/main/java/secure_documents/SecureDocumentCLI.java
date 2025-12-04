@@ -1,5 +1,8 @@
 package secure_documents;
 
+import entity.Report;
+import jakarta.json.JsonObject;
+
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.List;
@@ -48,14 +51,14 @@ public class SecureDocumentCLI {
             PrivateKey senderPrivKey = KeyLoader.readPrivateKey(senderKeyId);
             PublicKey recipientPubKey = KeyLoader.readPublicKey(recipientKeyId);
 
-            // Read input JSON
-            String plaintextJson = KeyLoader.readFileAsString(inputFile);
-
+            // Read input JSON and convert to Report Object
+            JsonObject reportJSON = KeyLoader.readJsonObject(inputFile);
+            Report report = SecureDocumentProtocol.JSONToReport(reportJSON);
             // Protect
-            String envelopeJson = SecureDocumentProtocol.protect(plaintextJson, recipientPubKey, senderPrivKey);
+            JsonObject envelopeJson = SecureDocumentProtocol.protect(report, recipientPubKey, senderPrivKey);
 
             // Write output
-            KeyLoader.writeStringToFile(outputFile, envelopeJson);
+            KeyLoader.writeJsonObject(outputFile, envelopeJson);
 
             System.out.println("Document protected successfully. Output saved to: " + outputFile);
         } catch (Exception e) {
@@ -79,13 +82,14 @@ public class SecureDocumentCLI {
             PublicKey senderPubKey = KeyLoader.readPublicKey(senderKeyId);
 
             // Read envelope JSON
-            String envelopeJson = KeyLoader.readFileAsString(envelopeFile);
+            JsonObject envelopeJson = KeyLoader.readJsonObject(envelopeFile);
 
             // Unprotect
-            String plaintextJson = SecureDocumentProtocol.unprotect(envelopeJson, recipientPrivKey, senderPubKey);
+            Report plaintextReport = SecureDocumentProtocol.unprotect(envelopeJson, recipientPrivKey, senderPubKey);
 
+            JsonObject plainTextJson = SecureDocumentProtocol.reportToJson(plaintextReport);
             // Write output
-            KeyLoader.writeStringToFile(outputFile, plaintextJson);
+            KeyLoader.writeJsonObject(outputFile, plainTextJson);
 
             System.out.println("Document unprotected successfully. Output saved to: " + outputFile);
         } catch (Exception e) {
@@ -102,7 +106,7 @@ public class SecureDocumentCLI {
 
         try {
             // Read envelope JSON
-            String envelopeJson = KeyLoader.readFileAsString(envelopeFile);
+            JsonObject envelopeJson = KeyLoader.readJsonObject(envelopeFile);
 
             // Check
             Map<String, Object> result = SecureDocumentProtocol.check(envelopeJson);

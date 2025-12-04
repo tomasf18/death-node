@@ -5,12 +5,13 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.Signature;
+import java.security.spec.MGF1ParameterSpec;
+import java.security.spec.PSSParameterSpec;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -19,9 +20,10 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import entity.Report;
+import jakarta.json.Json;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonReader;
 
 /**
  * SecureDocumentProtocol
@@ -31,13 +33,9 @@ import com.fasterxml.jackson.databind.SerializationFeature;
  * - RSA-OAEP(SHA-256) to encrypt DEK for recipient
  * - RSA-PSS(SHA-256) to sign envelope (sender)
  * <p>
- * Requires Jackson (com.fasterxml.jackson.core:jackson-databind) for JSON
- * canonicalization.
+ * Requires Jakarta for JSON canonicalization.
  */
 public class SecureDocumentProtocol {
-
-    private static final ObjectMapper canonicalMapper = new ObjectMapper()
-            .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
 
     // AES-GCM parameters
     private static final int AES_KEY_SIZE = 256;
@@ -46,17 +44,10 @@ public class SecureDocumentProtocol {
 
     // RSA parameters for OAEP and PSS
     private static final String RSA_OAEP_TRANSFORM = "RSA/ECB/OAEPWithSHA-256AndMGF1Padding";
-    private static final String RSA_PSS_ALG = "SHA256withRSA";
+    private static final String RSA_PSS_ALG = "RSASSA-PSS";
     private static final String AES_GCM = "AES/GCM/NoPadding";
 
     private static final SecureRandom rng = new SecureRandom();
-
-    // ---------- Helper: canonicalize JSON (string) ----------
-    private static String canonicalizeJson(String json) throws Exception {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> map = canonicalMapper.readValue(json, LinkedHashMap.class);
-        return canonicalMapper.writeValueAsString(map);
-    }
 
     // ---------- utils ----------
     private static byte[] concat(byte[]... parts) {
@@ -72,32 +63,64 @@ public class SecureDocumentProtocol {
         return out;
     }
 
+    public static JsonObject reportToJson(Report report) {
+        return Json.createObjectBuilder()
+                .add("report_id", report.getId())
+                .add("timestamp", report.getTimestamp())
+                .add("reporter_pseudonym", report.getAuthor())
+                .add("version", report.getVersion())
+                .add("status", report.getStatus())
+                .add("content", Json.createObjectBuilder()
+                        .add("suspect", report.getContent().suspect)
+                        .add("description", report.getContent().description)
+                        .add("location", report.getContent().location)
+                        .build()
+                )
+                .build();
+    }
+
+    public static Report JSONToReport(JsonObject json) {
+        JsonObject contentJson = json.getJsonObject("content");
+
+        Report.ReportContent content = new Report.ReportContent(
+                contentJson.getString("suspect"),
+                contentJson.getString("description"),
+                contentJson.getString("location")
+        );
+
+        return new Report(
+                json.getString("report_id"),
+                json.getString("timestamp"),
+                json.getString("reporter_pseudonym"),
+                content,
+                json.getInt("version"),
+                json.getString("status")
+        );
+    }
+
     // ---------- protect ----------
     /**
      * Protect a JSON document.
      *
-     * @param plaintextJson   canonical or raw JSON string of the document
+     * @param report Report object with the content of the report
      * @param recipientRsaPub recipient RSA public key (to encrypt DEK)
      * @param senderRsaPriv   sender RSA private key (to sign envelope)
      * @return envelope JSON string with fields: key_enc, nonce, metadata,
      *         ciphertext, tag, signature
      */
-    public static String protect(String plaintextJson,
-                                 PublicKey recipientRsaPub,
-                                 PrivateKey senderRsaPriv) throws Exception {
+    public static JsonObject protect(Report report,
+                                     PublicKey recipientRsaPub,
+                                     PrivateKey senderRsaPriv) throws Exception {
 
-        // 1) canonicalize plaintext
-        String canonicalPlaintext = canonicalizeJson(plaintextJson);
-        byte[] plaintextBytes = canonicalPlaintext.getBytes(StandardCharsets.UTF_8);
-
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode root = mapper.readTree(plaintextJson);
+        JsonObject reportJson = reportToJson(report);
 
         // 2) canonicalize AAD
-        Map<String, Object> aadMap = new HashMap<>();
-        aadMap.put("timestamp", root.get("timestamp").asText());
-        aadMap.put("version", root.get("version").asInt());
-        byte[] aadBytes = canonicalMapper.writeValueAsBytes(aadMap);
+        JsonObject aadJson = Json.createObjectBuilder()
+                .add("timestamp", report.getTimestamp())
+                .add("report_id", report.getId())
+                .build();
+        byte[] aadBytes = aadJson.toString().getBytes(StandardCharsets.UTF_8);
+
 
         // 3) generate ephemeral DEK (AES-256)
         KeyGenerator kgen = KeyGenerator.getInstance("AES");
@@ -113,7 +136,7 @@ public class SecureDocumentProtocol {
         GCMParameterSpec gcmSpec = new GCMParameterSpec(GCM_TAG_SIZE, iv);
         aesGcm.init(Cipher.ENCRYPT_MODE, dek, gcmSpec);
         aesGcm.updateAAD(aadBytes);
-        byte[] ciphertextWithTag = aesGcm.doFinal(plaintextBytes);
+        byte[] ciphertextWithTag = aesGcm.doFinal(reportJson.toString().getBytes(StandardCharsets.UTF_8));
 
         // Split ciphertext and tag
         int tagLengthBytes = GCM_TAG_SIZE / 8;
@@ -129,23 +152,31 @@ public class SecureDocumentProtocol {
         // 7) Compute signature (RSA-PSS) over (aad || ciphertext)
         byte[] toSign = concat(aadBytes, ciphertext);
         Signature sig = Signature.getInstance(RSA_PSS_ALG);
+        PSSParameterSpec pssSpec = new PSSParameterSpec(
+                "SHA-256",
+                "MGF1",
+                new MGF1ParameterSpec("SHA-256"),
+                32,
+                1
+        );
+        sig.setParameter(pssSpec);
         sig.initSign(senderRsaPriv, rng);
         sig.update(toSign);
         byte[] signature = sig.sign();
 
         // 8) Build envelope (JSON-friendly, use Base64 for binary fields)
-        Map<String, Object> reportEnc = new LinkedHashMap<>();
-        reportEnc.put("nonce", Base64.getEncoder().encodeToString(iv));
-        reportEnc.put("ciphertext", Base64.getEncoder().encodeToString(ciphertext));
-        reportEnc.put("tag", Base64.getEncoder().encodeToString(tag));
+        JsonObject reportEnc = Json.createObjectBuilder()
+                .add("nonce",      Base64.getEncoder().encodeToString(iv))
+                .add("ciphertext", Base64.getEncoder().encodeToString(ciphertext))
+                .add("tag",        Base64.getEncoder().encodeToString(tag))
+                .build();
 
-        Map<String, Object> envelope = new LinkedHashMap<>();
-        envelope.put("key_enc", Base64.getEncoder().encodeToString(encryptedDek));
-        envelope.put("metadata", aadMap);
-        envelope.put("report_enc", reportEnc);
-        envelope.put("signature", Base64.getEncoder().encodeToString(signature));
-
-        return canonicalMapper.writeValueAsString(envelope);
+        return Json.createObjectBuilder()
+                .add("key_enc", Base64.getEncoder().encodeToString(encryptedDek))
+                .add("metadata", aadJson)
+                .add("report_enc", reportEnc)
+                .add("signature", Base64.getEncoder().encodeToString(signature))
+                .build();
     }
 
     // ---------- check ----------
@@ -157,51 +188,43 @@ public class SecureDocumentProtocol {
      * @param envelopeJson JSON returned by protect()
      * @return map with keys: valid (boolean) and reasons (list)
      */
-    public static Map<String, Object> check(String envelopeJson) {
+    public static Map<String, Object> check(JsonObject envelopeJson) {
         Map<String, Object> resp = new HashMap<>();
         List<String> reasons = new ArrayList<>();
         resp.put("reasons", reasons);
 
         try {
-            // Parse envelope
-            @SuppressWarnings("unchecked")
-            Map<String, Object> envelope = canonicalMapper.readValue(envelopeJson, LinkedHashMap.class);
-
-            // Verifies the existing of the fields
-            List<String> requiredEnvelopeFields = List.of("report_enc", "metadata", "signature");
+            // Verifies the existence of these fields : "report_enc"; "metadata"; "signature"; "key_enc"
+            List<String> requiredEnvelopeFields = List.of("report_enc", "metadata", "signature", "key_enc");
             for (String f : requiredEnvelopeFields) {
-                if (!envelope.containsKey(f) || envelope.get(f) == null) {
+                if (!envelopeJson.containsKey(f) || envelopeJson.isNull(f)) {
                     reasons.add("Missing required envelope field: " + f);
                     resp.put("valid", false);
                     return resp;
                 }
             }
 
-            // Validate metadata
-            Object metadataObj = envelope.get("metadata");
-            if (!(metadataObj instanceof Map)) {
+            // Validate Metadata
+            JsonObject metadata = envelopeJson.getJsonObject("metadata");
+            if (metadata == null) {
                 reasons.add("Invalid metadata");
                 resp.put("valid", false);
                 return resp;
             }
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> metadata = (Map<String, Object>) metadataObj;
-
-            List<String> requiredMetadataFields = List.of("timestamp", "version");
+            List<String> requiredMetadataFields = List.of("timestamp", "report_id");
             for (String f : requiredMetadataFields) {
-                if (!metadata.containsKey(f) || metadata.get(f) == null) {
+                if (!metadata.containsKey(f) || metadata.isNull(f)) {
                     reasons.add("Missing metadata field: " + f);
                     resp.put("valid", false);
                     return resp;
                 }
             }
 
-            // Validate timestamp
-            String timestampStr = metadata.get("timestamp").toString();
+            // Validate Timestamp
+            String timestampStr = metadata.getString("timestamp");
             try {
-                Instant timestamp = Instant.parse(timestampStr); // ISO-8601
-                // exemplo: verificar se não é no futuro
+                Instant timestamp = Instant.parse(timestampStr);
                 if (timestamp.isAfter(Instant.now())) {
                     reasons.add("Timestamp is in the future");
                     resp.put("valid", false);
@@ -213,42 +236,26 @@ public class SecureDocumentProtocol {
                 return resp;
             }
 
-            // Validate version
-            Object versionObj = metadata.get("version");
-            int version;
-            try {
-                version = Integer.parseInt(versionObj.toString());
-            } catch (Exception e) {
-                reasons.add("Version must be a valid integer");
-                resp.put("valid", false);
-                return resp;
-            }
-
-            if (version <= 0) {
-                reasons.add("Version must be > 0");
-                resp.put("valid", false);
-                return resp;
-            }
-
-            if (!(envelope.get("report_enc") instanceof Map)) {
+            // Validate "report_enc"
+            JsonObject reportEnc = envelopeJson.getJsonObject("report_enc");
+            if (reportEnc == null) {
                 reasons.add("Field 'report_enc' must be a JSON object");
                 resp.put("valid", false);
                 return resp;
             }
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> reportEnc = (Map<String, Object>) envelope.get("report_enc");
-
             List<String> requiredReportEncFields = List.of("ciphertext", "nonce", "tag");
             for (String f : requiredReportEncFields) {
-                if (!reportEnc.containsKey(f) || reportEnc.get(f) == null) {
+                if (!reportEnc.containsKey(f) || reportEnc.isNull(f)) {
                     reasons.add("Missing required report_enc field: " + f);
                     resp.put("valid", false);
                     return resp;
                 }
             }
-            // If all checks passed
+
+            // Se todas as verificações passaram
             resp.put("valid", true);
+
         } catch (Exception e) {
             resp.put("valid", false);
             reasons.add("Error during verification: " + e.getMessage());
@@ -266,33 +273,35 @@ public class SecureDocumentProtocol {
      * @param  senderRsaPub the sender's public key
      * @return plaintext JSON string
      */
-    public static String unprotect(String envelopeJson,
+    public static Report unprotect(JsonObject envelopeJson,
                                    PrivateKey recipientRsaPriv,
                                    PublicKey senderRsaPub) throws Exception {
 
         // Parse envelope
-        @SuppressWarnings("unchecked")
-        Map<String, Object> envelope = canonicalMapper.readValue(envelopeJson, LinkedHashMap.class);
+        JsonObject reportEnc = envelopeJson.getJsonObject("report_enc");
+        JsonObject metadata = envelopeJson.getJsonObject("metadata");
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> reportEnc = (Map<String, Object>) envelope.get("report_enc");
+        byte[] encryptedDek = Base64.getDecoder().decode(envelopeJson.getString("key_enc"));
+        byte[] nonce = Base64.getDecoder().decode(reportEnc.getString("nonce"));
+        byte[] ciphertext = Base64.getDecoder().decode(reportEnc.getString("ciphertext"));
+        byte[] tag = Base64.getDecoder().decode(reportEnc.getString("tag"));
+        byte[] signature = Base64.getDecoder().decode(envelopeJson.getString("signature"));
+        byte[] aadBytes = metadata.toString().getBytes(StandardCharsets.UTF_8);
 
-        byte[] encryptedDek = Base64.getDecoder().decode((String) envelope.get("key_enc"));
-        byte[] nonce = Base64.getDecoder().decode((String) reportEnc.get("nonce"));
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> aadMap = (Map<String, Object>) envelope.get("metadata");
-        byte[] aadBytes = canonicalMapper.writeValueAsBytes(aadMap);
-
-        byte[] ciphertext = Base64.getDecoder().decode((String) reportEnc.get("ciphertext"));
-        byte[] tag = Base64.getDecoder().decode((String) reportEnc.get("tag"));
-        byte[] signature = Base64.getDecoder().decode((String) envelope.get("signature"));
 
         // 1) verify signature first (optional but recommended)
-        byte[] signed = concat(aadBytes, ciphertext);
+        byte[] toSign = concat(aadBytes, ciphertext);
         Signature sig = Signature.getInstance(RSA_PSS_ALG);
+        PSSParameterSpec pssSpec = new PSSParameterSpec(
+                "SHA-256",
+                "MGF1",
+                new MGF1ParameterSpec("SHA-256"),
+                32,
+                1
+        );
+        sig.setParameter(pssSpec);
         sig.initVerify(senderRsaPub);
-        sig.update(signed);
+        sig.update(toSign);
         if (!sig.verify(signature)) {
             throw new SecurityException("Signature verification failed");
         }
@@ -311,12 +320,19 @@ public class SecureDocumentProtocol {
 
         // reconstruct ciphertext||tag for doFinal
         byte[] ciphertextAndTag = concat(ciphertext, tag);
-
+        byte[] plaintextBytes;
         try {
-            byte[] plaintextBytes = aesGcm.doFinal(ciphertextAndTag);
-            return new String(plaintextBytes, StandardCharsets.UTF_8);
+            plaintextBytes = aesGcm.doFinal(ciphertextAndTag);
         } catch (javax.crypto.AEADBadTagException e) {
             throw new SecurityException("GCM tag verification failed - ciphertext or AAD was tampered with", e);
         }
+
+        String plaintextJson = new String(plaintextBytes, StandardCharsets.UTF_8);
+        JsonReader reader = Json.createReader(new java.io.StringReader(plaintextJson));
+        JsonObject reportJson = reader.readObject();
+        reader.close();
+
+        System.out.println(plaintextJson);
+        return JSONToReport(reportJson);
     }
 }
