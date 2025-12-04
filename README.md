@@ -2,15 +2,14 @@
 
 ## Team
 
-| Number | Name           | User                                      | E-mail                              |
-|--------|----------------|-------------------------------------------| ------------------------------------|
-| 116496 | Guilherme Pais | <https://github.com/Guilherme-Parentesco> | <mailto:guilherme.p.pais@tecnico.ulisboa.pt>   |
-| 116122 | Tomás Santos   | <https://github.com/tomasf18>             | <mailto:tomas.santos.f@tecnico.ulisboa.pt>     |
-| 33333  | Pedro Duarte   | <https://github.com/pedropmad>            | <mailto:charlie@tecnico.ulisboa.pt> |
+| Number | Name           | User                                      | E-mail                                          |
+|--------|----------------|-------------------------------------------|-------------------------------------------------|
+| 116496 | Guilherme Pais | <https://github.com/Guilherme-Parentesco> | <mailto:guilherme.p.pais@tecnico.ulisboa.pt>    |
+| 116122 | Tomás Santos   | <https://github.com/tomasf18>             | <mailto:tomas.santos.f@tecnico.ulisboa.pt>      |
+| 116390 | Pedro Duarte   | <https://github.com/pedropmad>            | <mailto:pedro.alegre.duarte@tecnico.ulisboa.pt> |
 
-![Guilherme Pais](img/Guilherme.png) ![Tomás Santos](img/Tomas.jpg) ![Charlie](img/charlie.png)
+![Guilherme Pais](img/Guilherme.png) ![Tomás Santos](img/Tomas.jpg) ![Pedro Duarte](img/Pedro.jpg)
 
-*(add face photos with 150px height; faces should have similar size and framing)*
 
 ## Contents
 

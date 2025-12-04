@@ -26,6 +26,11 @@
             <name>Tomás Santos</name>
             <email>tomas.santos.f@tecnico.ulisboa.pt</email>
         </developer>
+        <developer>
+            <id>116390</id>
+            <name>Pedro Duarte</name>
+            <email>pedro.alegre.duarte@tecnico.ulisboa.pt</email>
+        </developer>
     </developers>
 
     <properties>
