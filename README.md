@@ -8,7 +8,7 @@
 | 116122 | Tomás Santos   | <https://github.com/tomasf18>             | <mailto:tomas.santos.f@tecnico.ulisboa.pt>      |
 | 116390 | Pedro Duarte   | <https://github.com/pedropmad>            | <mailto:pedro.alegre.duarte@tecnico.ulisboa.pt> |
 
-![Guilherme Pais](img/Guilherme.png) ![Tomás Santos](img/Tomas.jpg) ![Pedro Duarte](img/Pedro.jpg)
+![Guilherme Pais](resources/img/Guilherme.png) ![Tomás Santos](resources/img/Tomas.jpg) ![Pedro Duarte](resources/img/Pedro.jpg)
 
 
 ## Contents

@@ -1,0 +1,29 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE nodes (
+    node_id                 TEXT        PRIMARY KEY,
+    enc_pub_key             BLOB        NOT NULL,      -- RSA public key
+    sign_pub_key            BLOB        NOT NULL       -- Ed25519 public key
+);
+
+CREATE TABLE nodes_state (
+    node_id                 TEXT        PRIMARY KEY     REFERENCES nodes(node_id),
+    last_sequence_number    BIGINT,
+    last_envelope_hash      BLOB
+);
+
+CREATE TABLE reports (
+    envelope_hash           BLOB        PRIMARY KEY,
+    signer_node_id          TEXT        NOT NULL        REFERENCES nodes(node_id),
+    sequence_number         BIGINT      NOT NULL,
+    metadata_timestamp      TIMESTAMP   NOT NULL,
+    prev_report_hash        BLOB,
+    file_path               TEXT        NOT NULL,
+    UNIQUE (signer_node_id, sequence_number)
+);
+
+CREATE TABLE block_state (
+    id                      INTEGER     PRIMARY KEY     CHECK (id = 1),
+    last_block_number       BIGINT,
+    last_block_root         BLOB
+);
