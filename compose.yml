@@ -12,7 +12,7 @@ services:
       - "${POSTGRES_HOST_PORT}:${POSTGRES_CONTAINER_PORT}"
     volumes:
       - ${DB_VOLUME_NAME}:/var/lib/postgresql
-      - ./database/server_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ${DB_SCHEMA_HOST_PATH}:/docker-entrypoint-initdb.d/01_schema.sql
     restart: unless-stopped
 
   deathnode-server:
@@ -26,6 +26,12 @@ services:
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SERVER_PORT: ${SPRING_SERVER_PORT}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO}
+      SPRING_JPA_SHOW_SQL: ${SPRING_JPA_SHOW_SQL}
+      SPRING_STORAGE_ENVELOPES_PATH: ${SPRING_STORAGE_ENVELOPES_PATH}
+    volumes:
+      - ${SERVER_ENVELOPES_HOST_PATH}:${SERVER_ENVELOPES_CONTAINER_PATH}
     restart: unless-stopped
 
 volumes:

@@ -1,4 +1,4 @@
-package com.deathnode.server.model;
+package com.deathnode.server.entity;
 
 import jakarta.persistence.*;
 
