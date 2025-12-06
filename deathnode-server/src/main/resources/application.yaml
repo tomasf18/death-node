@@ -22,6 +22,6 @@ spring:
     init:
       mode: never
   
-  storage:
-    envelopes-path: ${SERVER_ENVELOPES_CONTAINER_PATH:/data/envelopes}
+storage:
+  envelopes-path: ${SPRING_STORAGE_ENVELOPES_PATH:/data/envelopes}
 

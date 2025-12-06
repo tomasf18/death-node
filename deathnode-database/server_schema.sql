@@ -13,17 +13,17 @@ CREATE TABLE IF NOT EXISTS nodes_sync_state (
 );
 
 CREATE TABLE IF NOT EXISTS reports (
-    envelope_hash           BYTEA                       PRIMARY KEY,
+    envelope_hash           VARCHAR(64)                       PRIMARY KEY,
     signer_node_id          VARCHAR(255)                NOT NULL        REFERENCES nodes(node_id),
     sequence_number         BIGINT                      NOT NULL,
     metadata_timestamp      TIMESTAMP WITH TIME ZONE    NOT NULL,
-    prev_report_hash        BYTEA                       NOT NULL,
+    prev_report_hash        BYTEA,
     file_path               TEXT                        NOT NULL,
     UNIQUE (signer_node_id, sequence_number)
 );
 
 CREATE TABLE IF NOT EXISTS signed_block_merkle_roots (
-    block_id                SERIAL              PRIMARY KEY,
+    block_id                BIGINT              PRIMARY KEY, -- auto-incremented
     block_number            BIGINT              NOT NULL        UNIQUE,
     block_root              BYTEA               NOT NULL        UNIQUE,
     per_node_roots_json     JSONB               NOT NULL,

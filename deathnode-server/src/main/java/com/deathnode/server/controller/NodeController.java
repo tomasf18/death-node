@@ -1,6 +1,6 @@
 package com.deathnode.server.controller;
 
-import com.deathnode.server.model.Node;
+import com.deathnode.server.entity.Node;
 import com.deathnode.server.repository.NodeRepository;
 import org.springframework.web.bind.annotation.*;
 
