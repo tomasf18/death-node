@@ -1,6 +1,7 @@
 package com.deathnode.client;
 
 import java.security.MessageDigest;
+import java.util.Base64;
 
 public class HashUtils {
 
@@ -12,6 +13,10 @@ public class HashUtils {
         } catch (Exception e) {
             throw new RuntimeException("Failed to compute SHA-256", e);
         }
+    }
+
+    public static String bytesToBase64Url(byte[] bytes) {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private static String bytesToHex(byte[] bytes) {

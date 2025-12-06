@@ -1,29 +1,66 @@
 package com.deathnode.client;
 
-public class Main {
-    public static void main(String[] args) throws Exception {
-        if (args.length == 0) {
-            System.out.println("Usage: java -jar client.jar <command> [args]");
-            System.out.println("Commands: create-report <signerId> <seq> | list | sync <nodeId>");
-            return;
-        }
-        LocalDb db = new LocalDb();
-        ClientService svc = new ClientService(db);
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-        switch (args[0]) {
-            case "create-report":
-                if (args.length < 3) { System.out.println("usage create-report <signerId> <seq>"); break; }
-                svc.createReport(args[1], Long.parseLong(args[2]));
-                break;
-            case "list":
-                svc.list();
-                break;
-            case "sync":
-                if (args.length < 2) { System.out.println("usage sync <nodeId>"); break; }
-                svc.sync(args[1]);
-                break;
-            default:
-                System.out.println("unknown command");
+import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
+
+public class Main {
+    private static final Logger logger = LogManager.getLogger(Main.class);
+
+    public static void main(String[] args) throws Exception {
+
+        LocalDb db = new LocalDb();
+        ClientService clientService = new ClientService(db);
+
+        Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
+
+        logger.info("DeathNode client started.");
+        logger.info("Type 'help' to see available commands.");
+
+        while (true) {
+            System.out.print("deathnode-client> ");
+
+            String line = sc.nextLine().trim();
+            if (line.isEmpty()) continue;
+
+            String[] parts = line.split("\\s+");
+            String command = parts[0];
+
+            try {
+                switch (command) {
+
+                    case "create-report":
+                        clientService.createReportInteractive(Config.NODE_ID);
+                        break;
+
+                    case "help":
+                        printHelp();
+                        break;
+
+                    case "q":
+                    case "exit":
+                        logger.info("Shutting down client.");
+                        return;
+
+                    default:
+                        logger.error("Unknown command: " + command);
+                        printHelp();
+                }
+
+            } catch (Exception e) {
+                logger.error("Command failed: " + command, e);
+            }
         }
+    }
+
+    private static void printHelp() {
+        System.out.println();
+        System.out.println("Available commands:");
+        System.out.println("  create-report     Create a new report interactively");
+        System.out.println("  help              Show this help");
+        System.out.println("  exit | q       Exit the client");
+        System.out.println();
     }
 }

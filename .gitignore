@@ -481,6 +481,9 @@ ENV/
 env.bak/
 venv.bak/
 
+.mvn/
+data/
+
 # Spyder project settings
 .spyderproject
 .spyproject

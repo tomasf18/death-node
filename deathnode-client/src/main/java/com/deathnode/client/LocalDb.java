@@ -3,63 +3,85 @@ package com.deathnode.client;
 import java.nio.file.*;
 import java.sql.*;
 import java.time.Instant;
-import java.util.logging.Logger;
-import java.sql.Timestamp;
+import java.util.Optional;
+
+import com.deathnode.client.Config;
 
 public class LocalDb {
-    private static final Logger logger = Logger.getLogger(LocalDb.class.getName());
     private final String url;
 
     public LocalDb() throws Exception {
         Path dbPath = Paths.get(Config.SQLITE_DB);
         Files.createDirectories(dbPath.getParent());
         this.url = "jdbc:sqlite:" + dbPath.toAbsolutePath();
-        initSchema();
     }
 
     private Connection conn() throws SQLException {
         return DriverManager.getConnection(url);
     }
 
-    private void initSchema() throws Exception {
-        Path schema = Paths.get("client_schema.sql");
-        if (!Files.exists(schema)) {
-            throw new RuntimeException("client_schema.sql missing in working dir");
-        }
-        String sql = Files.readString(schema);
-        try (Connection c = conn(); Statement s = c.createStatement()) {
-            s.executeUpdate("PRAGMA foreign_keys=ON;");
-            for (String stmt : sql.split(";")) {
-                String t = stmt.trim();
-                if (!t.isEmpty()) s.executeUpdate(t);
+    /**
+     * Return last node-local sequence number (0 if not present)
+     */
+    public long getLastSequenceNumber(String nodeId) throws SQLException {
+        String query = "SELECT last_sequence_number FROM nodes_state WHERE node_id = ?";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(query)) {
+            p.setString(1, nodeId);
+            try (ResultSet rs = p.executeQuery()) {
+                if (rs.next()) {
+                    long v = rs.getLong(1);
+                    if (rs.wasNull()) return 0L;
+                    return v;
+                }
+                return 0L;
             }
         }
     }
 
-    public void insertReport(String envelopeHash, String filePath, String signerId, long seq, byte[] prevHash) throws SQLException {
-        String sql = "INSERT INTO reports(envelope_hash,file_path,signer_node_id,sequence_number,prev_report_hash,metadata_timestamp) VALUES(?,?,?,?,?,?)";
-        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(sql)) {
-            p.setString(1, envelopeHash);
-            p.setString(2, filePath);
-            p.setString(3, signerId);
-            p.setLong(4, seq);
-            p.setBytes(5, prevHash);
-            p.setTimestamp(6, Timestamp.from(Instant.now()));   
-            p.executeUpdate();
-        }
-    }
-    public void listReports() throws SQLException {
-        String sql = "SELECT envelope_hash, signer_node_id, sequence_number, file_path, accepted FROM reports ORDER BY stored_at DESC";
-        try (Connection c = conn(); Statement s = c.createStatement(); ResultSet rs = s.executeQuery(sql)) {
-            logger.info("Local reports:");
-            while (rs.next()) {
-                logger.info(String.format("%s | %s | seq=%d | %s | accepted=%d",
-                        rs.getString("envelope_hash"),
-                        rs.getString("signer_node_id"),
-                        rs.getLong("sequence_number"),
-                        rs.getString("file_path"),
-                        rs.getInt("accepted")));
+    /**
+     * Return last envelope hash (or null)
+     */
+    public String getLastEnvelopeHash(String nodeId) throws SQLException {
+        String query = "SELECT last_envelope_hash FROM nodes_state WHERE node_id = ?";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(query)) {
+            p.setString(1, nodeId);
+            try (ResultSet rs = p.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getString(1); // may be null
+                }
+                return null;
             }
         }
     }
+
+    /**
+     * Upsert node state (last_sequence_number, last_envelope_hash) -> if entry not present, insert it, else update it
+     */
+    public void upsertNodeState(String nodeId, long lastSequenceNumber, String lastEnvelopeHash) throws SQLException {
+        String query = "INSERT INTO nodes_state(node_id, last_sequence_number, last_envelope_hash) VALUES(?,?,?) "
+                   + "ON CONFLICT(node_id) DO UPDATE SET last_sequence_number = excluded.last_sequence_number, last_envelope_hash = excluded.last_envelope_hash";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(query)) {
+            p.setString(1, nodeId);
+            p.setLong(2, lastSequenceNumber);
+            if (lastEnvelopeHash == null) p.setNull(3, Types.VARCHAR); else p.setString(3, lastEnvelopeHash);
+            p.executeUpdate();
+        }
+    }
+
+    /**
+     * Insert a new local report entry (pending sync).
+     */
+    public void insertReport(String envelopeHash, String filePath, String signerId, long nodeSequenceNumber, String prevEnvelopeHash) throws SQLException {
+        String query = "INSERT INTO reports(envelope_hash,file_path,signer_node_id,node_sequence_number,metadata_timestamp,prev_envelope_hash) VALUES(?,?,?,?,?,?)";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(query)) {
+            p.setString(1, envelopeHash);
+            p.setString(2, filePath);
+            p.setString(3, signerId);
+            p.setLong(4, nodeSequenceNumber);
+            p.setString(5, Instant.now().toString());
+            if (prevEnvelopeHash == null) p.setNull(6, Types.VARCHAR); else p.setString(6, prevEnvelopeHash);
+            p.executeUpdate();
+        }
+    }
+
 }

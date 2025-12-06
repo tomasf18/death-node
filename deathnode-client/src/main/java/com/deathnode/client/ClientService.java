@@ -1,90 +1,150 @@
 package com.deathnode.client;
 
 import com.google.gson.Gson;
-import java.io.*;
-import java.net.http.*;
-import java.net.URI;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.*;
+import java.security.SecureRandom;
+import java.time.Instant;
+import java.util.Scanner;
+import java.util.UUID;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import com.deathnode.client.entity.*;
+import com.deathnode.client.Config;
 
 public class ClientService {
+    private static final Logger logger = LogManager.getLogger(Main.class);
     private final LocalDb db;
-    private final HttpClient http = HttpClient.newHttpClient();
-    private final Gson gson = new Gson();
+    private final Gson gson;
+    private final SecureRandom rnd = new SecureRandom();
 
     public ClientService(LocalDb db) {
         this.db = db;
+        this.gson = new GsonBuilder().disableHtmlEscaping().create();
     }
 
-    public String createReport(String signerId, long seq) throws Exception {
-        Files.createDirectories(Paths.get(Config.ENVELOPES_DIR));
-        // Dummy payload: later this will be an AEAD envelope (JSON)
-        String content = "report body created at " + System.currentTimeMillis() + " by " + signerId;
-        byte[] bytes = content.getBytes();
+    /**
+     * Interactive report creation prompt, builds envelope with placeholders (before adding security features),
+     * stores envelope file, and persists local DB entries and node state.
+     *
+     * signerId is the local node id (e.g. "1.1.1.1")
+     */
+    public String createReportInteractive(String signerId) throws Exception {
+        Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
 
-        String hash = HashUtils.sha256Hex(bytes);
-        String filename = hash + ".env";
-        Path p = Paths.get(Config.ENVELOPES_DIR, filename);
-        Files.write(p, bytes, StandardOpenOption.CREATE_NEW);
+        System.out.print("Suspect: ");
+        String suspect = sc.nextLine().trim();
 
-        // prev_hash - baseline: zero bytes
-        byte[] prev = new byte[32];
+        System.out.print("Description: ");
+        String description = sc.nextLine().trim();
 
-        db.insertReport(hash, p.toString(), signerId, seq, prev);
-        System.out.println("Created envelope: " + filename);
-        return hash;
+        System.out.print("Location: ");
+        String location = sc.nextLine().trim();
+
+        // -------------------------------
+        // 1. Build Report Object
+        // -------------------------------
+        String reportId = UUID.randomUUID().toString();
+        String reportCreationTimestamp = Instant.now().toString();
+        String reporterPseudonym = loadSelfPseudonymFromConfigOrDb();
+
+        Report.Content content = new Report.Content();
+        content.setSuspect(suspect);
+        content.setDescription(description);
+        content.setLocation(location);
+
+        Report report = new Report();
+        report.setReportId(reportId);
+        report.setReportCreationTimestamp(reportCreationTimestamp);
+        report.setReporterPseudonym(reporterPseudonym);
+        report.setContent(content);
+        report.setVersion(1);
+        report.setStatus("pending_validation");
+
+        // -------------------------------
+        // 2. Build Inner Payload
+        // -------------------------------
+        InnerPayload payload = new InnerPayload();
+        payload.setReport(report);
+        payload.setSignature("PLACEHOLDER_SIGNATURE_BASE64");
+
+        // -------------------------------
+        // 3. Prepare Metadata
+        // -------------------------------
+        long lastSeq = db.getLastSequenceNumber(signerId);
+        long nextSeq = lastSeq + 1;
+
+        String prevHash = db.getLastEnvelopeHash(signerId);
+        String prevHashB64 = (prevHash == null || prevHash.isEmpty()) ? "" : prevHash;
+
+        Metadata metadata = new Metadata();
+        metadata.setReportId(reportId);
+        metadata.setMetadataTimestamp(Instant.now().toString());
+        metadata.setReportCreationTimestamp(reportCreationTimestamp);
+        metadata.setNodeSequenceNumber(nextSeq);
+        metadata.setPrevEnvelopeHash(prevHashB64);
+        metadata.setSignerNodeId(signerId);
+        metadata.setSignerAlg("Ed25519");
+
+        // -------------------------------
+        // 4. Build Dummy Content Key Encryption
+        // -------------------------------
+        ContentKeyEncrypted keyEnc = new ContentKeyEncrypted();
+        keyEnc.setEncryptionAlgorithm("RSA-OAEP-SHA256");
+
+        EncryptedKey ek = new EncryptedKey();
+        ek.setNode(signerId);
+        ek.setEncryptedKey(HashUtils.bytesToBase64Url(("dummy-cek-" + reportId).getBytes(StandardCharsets.UTF_8)));
+
+        keyEnc.getKeys().add(ek);
+
+        // -------------------------------
+        // 5. Build Dummy Report Encryption
+        // -------------------------------
+        byte[] innerBytes = gson.toJson(payload.toJson()).getBytes(StandardCharsets.UTF_8);
+
+        byte[] nonce = new byte[12];
+        rnd.nextBytes(nonce);
+
+        ReportEncrypted reportEnc = new ReportEncrypted();
+        reportEnc.setEncryptionAlgorithm("AES-256-GCM");
+        reportEnc.setNonce(HashUtils.bytesToBase64Url(nonce));
+        reportEnc.setCiphertext(HashUtils.bytesToBase64Url(innerBytes));
+        reportEnc.setTag(HashUtils.bytesToBase64Url(("tag-" + reportId).getBytes(StandardCharsets.UTF_8)));
+
+        // -------------------------------
+        // 6. Build Envelope Object
+        // -------------------------------
+        Envelope envelope = new Envelope();
+        envelope.setMetadata(metadata);
+        envelope.setKeyEnc(keyEnc);
+        envelope.setReportEnc(reportEnc);
+
+        // -------------------------------
+        // 7. Persist Envelope File
+        // -------------------------------
+        Path fullPath = envelope.writeSelf(Paths.get(Config.ENVELOPES_DIR));
+        String envelopeHashHex = envelope.computeHashHex();
+
+        // -------------------------------
+        // 8. Persist in Local Database
+        // -------------------------------
+        db.insertReport(envelopeHashHex, fullPath.toString(), signerId, nextSeq, prevHash);
+        db.upsertNodeState(signerId, nextSeq, envelopeHashHex);
+
+        logger.info("Created envelope: " + fullPath.getFileName());
+        return envelopeHashHex;
     }
 
-    public void list() throws Exception {
-        db.listReports();
-    }
 
-    public void sync(String nodeId) throws Exception {
-        // prepare buffer: for baseline, include all non-accepted reports
-        List<Map<String,Object>> buffer = new ArrayList<>();
-        try (ConnectionlessReports cr = new ConnectionlessReports()) {
-            buffer = cr.getPendingReports();
-        }
-
-        Map<String,Object> payload = new HashMap<>();
-        payload.put("nodeId", nodeId);
-        payload.put("buffer", buffer);
-
-        String json = gson.toJson(payload);
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(Config.SERVER_BASE + "/sync"))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json))
-                .build();
-
-        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
-        System.out.println("Server response: " + resp.statusCode() + " -> " + resp.body());
-
-        // TODO: parse response, update local block state, mark accepted reports
-    }
-
-    // small helper to read pending reports without adding a heavy DAO in this sample
-    private class ConnectionlessReports implements AutoCloseable {
-        public List<Map<String,Object>> getPendingReports() throws Exception {
-            List<Map<String,Object>> list = new ArrayList<>();
-            // quick-and-dirty JDBC read to collect pending reports
-            java.sql.Connection c = java.sql.DriverManager.getConnection("jdbc:sqlite:" + Paths.get(Config.SQLITE_DB).toAbsolutePath());
-            try (java.sql.PreparedStatement p = c.prepareStatement("SELECT envelope_hash, file_path, signer_node_id, sequence_number FROM reports WHERE accepted=0")) {
-                try (java.sql.ResultSet rs = p.executeQuery()) {
-                    while (rs.next()) {
-                        Map<String,Object> row = new HashMap<>();
-                        row.put("envelopeHash", rs.getString("envelope_hash"));
-                        row.put("filePath", rs.getString("file_path"));
-                        row.put("sequence", rs.getLong("sequence_number"));
-                        row.put("signer", rs.getString("signer_node_id"));
-                        list.add(row);
-                    }
-                }
-            } finally {
-                c.close();
-            }
-            return list;
-        }
-        public void close() {}
+    private String loadSelfPseudonymFromConfigOrDb() {
+        return Config.NODE_PSEUDONYM;
     }
 }
