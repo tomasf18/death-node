@@ -1,11 +1,25 @@
 package com.deathnode.client;
 
-import java.nio.file.*;
-import java.sql.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Types;
+
 import java.time.Instant;
-import java.util.Optional;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import com.deathnode.client.Config;
+import com.deathnode.client.ClientService;
 
 public class LocalDb {
     private final String url;
@@ -82,6 +96,59 @@ public class LocalDb {
             if (prevEnvelopeHash == null) p.setNull(6, Types.VARCHAR); else p.setString(6, prevEnvelopeHash);
             p.executeUpdate();
         }
+    }
+
+    public String getEncPubKey(String nodeId) throws SQLException {
+        String sql = "SELECT enc_pub_key FROM nodes WHERE node_id = ?";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setString(1, nodeId);
+            try (ResultSet rs = p.executeQuery()) {
+                if (rs.next()) return rs.getString(1);
+                return null;
+            }
+        }
+    }
+
+    public Map<String, String> getAllEncPubKeys() throws SQLException {
+        String sql = "SELECT node_id, enc_pub_key FROM nodes";
+        Map<String, String> map = new LinkedHashMap<>();
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(sql); ResultSet rs = p.executeQuery()) {
+            while (rs.next()) {
+                String nodeId = rs.getString(1);
+                String enc = rs.getString(2);
+                map.put(nodeId, enc);
+            }
+        }
+        return map;
+    }
+
+    public String getSignPubKey(String nodeId) throws SQLException {
+        String sql = "SELECT sign_pub_key FROM nodes WHERE node_id = ?";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setString(1, nodeId);
+            try (ResultSet rs = p.executeQuery()) {
+                if (rs.next()) return rs.getString(1);
+                return null;
+            }
+        }
+    }
+
+    public List<ClientService.ReportDatabaseRow> listReports() throws SQLException {
+        String sql = "SELECT envelope_hash, signer_node_id, node_sequence_number, metadata_timestamp, prev_envelope_hash, file_path FROM reports ORDER BY node_sequence_number ASC";
+        List<ClientService.ReportDatabaseRow> list = new ArrayList<>();
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(sql); ResultSet rs = p.executeQuery()) {
+            while (rs.next()) {
+                ClientService.ReportDatabaseRow r = new ClientService.ReportDatabaseRow();
+                r.envelopeHash = rs.getString(1);
+                r.signerNodeId = rs.getString(2);
+                r.nodeSequenceNumber = rs.getLong(3);
+                r.metadataTimestamp = rs.getString(4);
+                r.prevEnvelopeHash = rs.getString(5);
+                r.filePath = rs.getString(6);
+                list.add(r);
+            }
+        }
+        return list;
     }
 
 }

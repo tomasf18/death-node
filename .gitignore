@@ -628,3 +628,12 @@ build/
 
 ### VS Code ###
 .vscode/
+
+
+# All keys .der and .pem inside /keys/ directory
+*.der
+*.pem
+*.json
+*.b64
+*.jks
+*.p12
