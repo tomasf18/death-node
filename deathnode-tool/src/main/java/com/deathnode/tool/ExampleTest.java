@@ -13,7 +13,7 @@ import com.deathnode.tool.utils.KeyLoader;
 /**
  * ExampleTest - Demonstrates programmatic usage of the SecureDocumentProtocol library.
  * 
- * This is NOT a JUnit test, but rather an example showing how to:
+ * This is an example showing how to:
  * 1. Generate keys
  * 2. Create and protect a report
  * 3. Check the envelope
