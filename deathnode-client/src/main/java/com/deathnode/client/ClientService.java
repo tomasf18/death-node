@@ -9,6 +9,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonArray;
 
 import java.io.InputStream;
 
@@ -26,29 +27,30 @@ import java.security.spec.X509EncodedKeySpec;
 
 import java.time.Instant;
 
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Scanner;
-import java.util.UUID;
+import java.util.*;
 
 public class ClientService {
 
     private final LocalDb db;
     private final Gson gson;
+    private final List<String> pendingReports;
+    private static final int BUFFER_SIZE = 4;
 
     public ClientService(LocalDb db) {
         this.db = db;
         this.gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
+        this.pendingReports = new ArrayList<>(BUFFER_SIZE);
     }
 
     /**
      * Create a report interactively, protect it with the SecureDocumentProtocol, persist file and DB.
      */
     public String createReportInteractive() throws Exception {
+        if (pendingReports.size() >= BUFFER_SIZE ) {
+            System.out.println("Cannot create report, because the buffer is full");
+            System.out.println("Synchronize with the server now...");
+            syncReports();
+        }
         Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
 
         System.out.print("Suspect: ");
@@ -158,8 +160,81 @@ public class ClientService {
         db.insertReport(envelopeHashHex, written.toString(), Config.NODE_SELF_ID, nextSeq, prevHashHex);
         db.upsertNodeState(Config.NODE_SELF_ID, nextSeq, envelopeHashHex);
 
+        // -------------------------------
+        // 7) Buffering the Report
+        // -------------------------------
+        pendingReports.add(written.toString());
+        if (pendingReports.size() == BUFFER_SIZE) {
+            syncReports();
+        }
+
         System.out.println("Created envelope: " + written.getFileName().toString());
         return envelopeHashHex;
+    }
+
+    /**
+     * Synchronize all buffered reports with the server via POST /sync endpoint.
+     * */
+    public void syncReports() throws Exception {
+        if (pendingReports.isEmpty()) {
+            System.out.println("Buffer is empty, don't have reports to sync");
+            return;
+        }
+        System.out.println("Synchronization " + pendingReports.size() + " reports...");
+
+        List<JsonObject> toSend = new ArrayList<>();
+        for (String path : pendingReports) {
+            try {
+                Path p = Paths.get(path);
+                if (!Files.exists(p)) {
+                    System.err.println(" [ERROR] Envelope não encontrado: " + path);
+                    return; // FIXME: deixar o return ou subsituir para o continue caso um report falhe, manter consistência?
+                }
+
+                String raw = Files.readString(p, StandardCharsets.UTF_8);
+                JsonObject envJson = JsonParser.parseString(raw).getAsJsonObject();
+                toSend.add(envJson);
+
+            } catch (Exception ex) {
+                System.err.println("  [ERROR] Falha to proccess " + path + ": " + ex.getMessage());
+            }
+        }
+
+        if (toSend.isEmpty()) {
+            System.err.println("✗ No valid envelopes to send.");
+            return;
+        }
+
+        // Send the envelopes to the server
+        if (sendEnvelopesToServer(toSend)) {
+            pendingReports.clear();
+            System.out.println("✓ Synchronization conclude! " + toSend.size() + " reports sent.");
+        } else {
+            System.err.println("✗ Fail to synchronize");
+        }
+    }
+
+    /**
+     * Send array of envelopes to rhe server via POST '/sync'
+     * @param envelopes array of the envelopes to send
+     * @return truth If the operation was successful, false otherwise
+     */
+    private boolean sendEnvelopesToServer(List<JsonObject> envelopes) {
+        try {
+            JsonArray jsonArray = new JsonArray();
+            for (JsonObject env : envelopes) {
+                jsonArray.add(env);
+            }
+
+            String jsonPayload = gson.toJson(jsonArray);
+
+            // TODO: send to the server endpoint, POST?
+            return true;
+
+        } catch (Exception ex) {
+            System.err.println("  [ERROR] in sending the reports to the server: " + ex.getMessage());
+            return false;
+        }
     }
 
     /**
