@@ -7,6 +7,4 @@ import java.util.List;
 
 public interface ReportRepository extends JpaRepository<Report, String> {
 
-    List<Report> findAllBySignerNodeIdOrderBySequenceNumberAsc(String signerNodeId);
-
 }

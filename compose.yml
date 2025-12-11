@@ -13,13 +13,20 @@ services:
     volumes:
       - ${DB_VOLUME_NAME}:/var/lib/postgresql
       - ${DB_SCHEMA_HOST_PATH}:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   deathnode-server:
     build: ${SERVER_BUILD_CONTEXT}
     container_name: ${SERVER_CONTAINER_NAME}
     depends_on:
-      - deathnode-db
+      deathnode-db:
+        condition: service_healthy
     ports:
       - "${SERVER_HOST_PORT}:${SERVER_CONTAINER_PORT}"
     environment:

@@ -1,26 +1,20 @@
 # build stage
 FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
+
+# Copy the prepared local dependency artifact directory
+COPY local-repo /root/.m2/repository/
+
+# Add a verification step to ensure the artifact is in the cache 
+RUN ls -l /root/.m2/repository/com/deathnode/deathnode-tool/1.0.0/
+
 COPY pom.xml .
-RUN mvn dependency:go-offline
 COPY src ./src
-# build the jar
+# build the jar (This command will now find the deathnode-tool in the container's Maven cache)
 RUN mvn clean package -DskipTests
 
 # runtime stage
 FROM eclipse-temurin:21-jdk-alpine
 WORKDIR /app
-# copy only the built jar from the previous stage
 COPY --from=build /app/target/deathnode-server-0.0.1-SNAPSHOT.jar /app/deathnode-server.jar
-# expose is optional (compose already maps it)
-# EXPOSE 8080
 CMD ["java", "-jar", "deathnode-server.jar"]
-
-# --- 
-# What this Dockerfile does:
-# 1. Uses a multi-stage build to optimize the final image size.
-# 2. In the build stage, it uses a Maven image to compile the Java application
-#    and package it into a JAR file.
-# 3. In the runtime stage, it uses a lightweight JDK image to run the application.
-# 4. The final image contains only the necessary runtime components and the
-#    compiled JAR file, making it smaller and more efficient.
