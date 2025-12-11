@@ -637,3 +637,7 @@ build/
 *.b64
 *.jks
 *.p12
+
+# allow test reports
+!test-reports/
+!test-reports/*.json

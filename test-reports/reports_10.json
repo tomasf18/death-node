@@ -1,0 +1,52 @@
+[
+    {
+        "suspect": "Peter Dinklage",
+        "description": "If a job is worth doing it is worth doing well.",
+        "location": "Cayanguan"
+    },
+    {
+        "suspect": "Hugh Jackman",
+        "description": "Silence is golden.",
+        "location": "Hohenau"
+    },
+    {
+        "suspect": "Tom Hardy",
+        "description": "The worst wheel always creaks most.",
+        "location": "Powidz"
+    },
+    {
+        "suspect": "Jack Nicholson",
+        "description": "Beauty is but skin deep.",
+        "location": "Sao Joaquim da Barra"
+    },
+    {
+        "suspect": "Tony Curtis",
+        "description": "You are what you eat.",
+        "location": "Qafemal"
+    },
+    {
+        "suspect": "Amber Heard",
+        "description": "Where there's smoke there's fire.",
+        "location": "Cabul-an"
+    },
+    {
+        "suspect": "Rachel McAdams",
+        "description": "Cheerfulness smooths the road of life.",
+        "location": "Brownsville"
+    },
+    {
+        "suspect": "Emma Stone",
+        "description": "Temper is so good a thing that we should never lose it.",
+        "location": "Colotlipa"
+    },
+    {
+        "suspect": "Robert Swenson",
+        "description": "Sauce for the goose is sauce for the gander.",
+        "location": "Wakasa"
+    },
+    {
+        "suspect": "Drew Barrymore",
+        "description": "Grow angry slowly; there's plenty of time.",
+        "location": "Sanxi"
+    }
+]
