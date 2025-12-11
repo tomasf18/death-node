@@ -208,7 +208,7 @@ public class ClientService {
         // Send the envelopes to the server
         if (sendEnvelopesToServer(toSend)) {
             pendingReports.clear();
-            System.out.println("✓ Synchronization conclude! " + toSend.size() + " reports sent.");
+            System.out.println("✓ Synchronization concluded! " + toSend.size() + " reports sent.");
         } else {
             System.err.println("✗ Fail to synchronize");
         }
