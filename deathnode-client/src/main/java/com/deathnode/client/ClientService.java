@@ -260,9 +260,9 @@ public class ClientService {
     }
 
     /**
-     * Send array of envelopes to rhe server via POST '/sync'
+     * Send array of envelopes to the server via POST '/sync'
      * @param envelopes array of the envelopes to send
-     * @return truth If the operation was successful, false otherwise
+     * @return true If the operation was successful, false otherwise
      */
     private boolean sendEnvelopesToServer(List<JsonObject> envelopes) {
         try {

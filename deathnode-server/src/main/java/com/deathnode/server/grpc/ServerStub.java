@@ -10,6 +10,9 @@ public class ServerStub extends SyncServiceGrpc.SyncServiceImplBase {
         this.app = app;
     }
 
+    /**
+     * Server initializes sync procedure
+     */
     @Override
     public void requestSync(SyncProto.ClientMessage request, StreamObserver<SyncProto.Ack> responseObserver) {
 

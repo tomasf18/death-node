@@ -11,6 +11,6 @@ public class ServerApp {
     }
 
     public void collectReports() {
-        // TODO call collection in peerStubs
+        // TODO call for collection in peerStubs
     }
 }
