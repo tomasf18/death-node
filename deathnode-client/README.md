@@ -15,6 +15,16 @@ This guide uses two test nodes:
 
 ---
 
+## Note: For resets (empty database), use:
+```bash
+cd deathnode-client/
+rm -f data/client.db
+mkdir -p data/envelopes
+sqlite3 data/client.db < client_schema.sql
+
+java -jar target/client.jar
+```
+
 # 1. Clean Start (Hard Reset Environment)
 
 From the project root:

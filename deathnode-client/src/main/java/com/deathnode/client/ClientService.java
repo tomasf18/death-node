@@ -10,9 +10,12 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonArray;
+import com.google.gson.reflect.TypeToken;
 
+import java.io.FileReader;
 import java.io.InputStream;
 
+import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,7 +46,7 @@ public class ClientService {
     }
 
     /**
-     * Create a report interactively, protect it with the SecureDocumentProtocol, persist file and DB.
+     * Create a report interactively.
      */
     public String createReportInteractive() throws Exception {
         if (pendingReports.size() >= BUFFER_SIZE ) {
@@ -61,6 +64,48 @@ public class ClientService {
 
         System.out.print("Location: ");
         String location = sc.nextLine().trim();
+
+        return createReport(suspect, description, location);
+    }
+
+    /**
+     * Create a report using an already existing list of templates.
+     */
+    public void createRandomReport() throws Exception {
+        if (pendingReports.size() >= BUFFER_SIZE ) {
+            System.out.println("Cannot create report, because the buffer is full");
+            System.out.println("Synchronize with the server now...");
+            syncReports();
+        }
+
+        Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
+
+        System.out.print("Reports to create: ");
+        int n = sc.nextInt();
+
+        record Report(String suspect, String description, String location) {};
+        Type listType = new TypeToken<List<Report>>(){}.getType();
+
+        List<Report> reports;
+        try (FileReader reader = new FileReader("test-reports/reports_100000.json")) {
+            reports = gson.fromJson(reader, listType);
+        }
+
+        Report r;
+        Random rd = new Random();
+        for (int i = 0; i < n; i++) {
+            r = reports.get(rd.nextInt(reports.size()));
+            createReport(r.suspect, r.description, r.location);
+        }
+
+    }
+
+    /**
+     * Creates a report given a suspect and protects it with the SecureDocumentProtocol. Stores it in buffer.
+     * @return hash of the report.
+     */
+
+    private String createReport(String suspect, String description, String location) throws Exception {
 
         // -------------------------------
         // 1) Build Report object

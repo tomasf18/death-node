@@ -639,5 +639,5 @@ build/
 *.p12
 
 # allow test reports
-!test-reports/
+!deathnode-client/test-reports/
 !test-reports/*.json

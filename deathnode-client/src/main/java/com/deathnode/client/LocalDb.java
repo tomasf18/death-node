@@ -1,15 +1,11 @@
 package com.deathnode.client;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Types;
+import java.sql.*;
 
 import java.time.Instant;
 
@@ -20,6 +16,8 @@ import java.util.Map;
 
 import com.deathnode.client.Config;
 import com.deathnode.client.ClientService;
+
+import javax.imageio.IIOException;
 
 public class LocalDb {
     private final String url;

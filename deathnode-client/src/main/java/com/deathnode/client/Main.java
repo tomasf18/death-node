@@ -31,6 +31,10 @@ public class Main {
                         clientService.createReportInteractive();
                         break;
 
+                    case "create-random":
+                        clientService.createRandomReport();
+                        break;
+
                     case "list-reports":
                         clientService.listReports();
                         break;
@@ -59,6 +63,7 @@ public class Main {
         System.out.println();
         System.out.println("Available commands:");
         System.out.println("  create-report     Create a new report interactively");
+        System.out.println("  create-random     Create random reports from a premade list");
         System.out.println("  list-reports      List all reports");
         System.out.println("  help              Show this help");
         System.out.println("  exit | q          Exit the client");

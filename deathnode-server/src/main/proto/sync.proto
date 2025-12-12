@@ -49,4 +49,5 @@ message ServerMessage {
 service SyncService {
   // Bidirectional stream: client sends ClientMessage, server streams ServerMessage
   rpc Sync(stream ClientMessage) returns (stream ServerMessage);
+  rpc RequestSync(ClientMessage) returns (Ack);
 }
