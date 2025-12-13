@@ -38,10 +38,10 @@ public class Node {
     /**
      * This should be used to register the server
      */
-    public void registerPeer(String nodeId, String host, int port) {
-        if (connections.registerPeer(nodeId, host, port))
-            System.out.println("✓ Peer registered: " + nodeId + " @ " + host + ":" + port);
+    public void registerServer(String nodeId, String host, int port) {
+        if (connections.registerBlockingPeer(nodeId, host, port))
+            System.out.println("✓ Server registered: " + nodeId + " @ " + host + ":" + port);
         else
-            System.out.println("✗ Error registering peer " + nodeId + " @ " + host + ":" + port);
+            System.out.println("✗ Error registering server " + nodeId + " @ " + host + ":" + port);
     }
 }

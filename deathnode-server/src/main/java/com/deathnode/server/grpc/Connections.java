@@ -3,11 +3,12 @@ package com.deathnode.server.grpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Connections {
-
+    private final Map<String, SyncServiceGrpc.SyncServiceBlockingStub> peerBlockingStubs = new ConcurrentHashMap<>();
     private final Map<String, SyncServiceGrpc.SyncServiceStub> peerStubs = new ConcurrentHashMap<>();
     private final Map<String, ManagedChannel> connectedPeers = new ConcurrentHashMap<>();;
 
@@ -44,7 +45,30 @@ public class Connections {
         return false;
     }
 
-    public ManagedChannel getChannel(String nodeId) {
-        return connectedPeers.get(nodeId);
+    public boolean registerBlockingPeer(String nodeId, String host, int port) {
+        if (!connectedPeers.containsKey(nodeId)) {
+            ManagedChannel channel = ManagedChannelBuilder
+                    .forAddress(host, port)
+                    .usePlaintext()
+                    .build();
+
+            SyncServiceGrpc.SyncServiceBlockingStub stub = SyncServiceGrpc.newBlockingStub(channel);
+
+            connectedPeers.put(nodeId, channel);
+            peerBlockingStubs.put(nodeId, stub);
+
+            return true;
+        }
+        return false;
     }
+
+    public void getStubs(List<SyncServiceGrpc.SyncServiceStub> stubs) {
+        stubs.addAll(peerStubs.values());
+    }
+
+    public SyncServiceGrpc.SyncServiceBlockingStub getBlockingStub(String nodeId) {
+        return peerBlockingStubs.get(nodeId);
+    }
+
+
 }

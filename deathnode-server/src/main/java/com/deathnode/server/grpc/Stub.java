@@ -17,7 +17,7 @@ public class Stub extends SyncServiceGrpc.SyncServiceImplBase {
     public void requestSync(SyncProto.ClientMessage request, StreamObserver<SyncProto.Ack> responseObserver) {
 
         SyncProto.Ack ack = SyncProto.Ack.newBuilder()
-                .setMessage("")
+                .setMessage("RequestSync received")
                 .build();
         responseObserver.onNext(ack);
         responseObserver.onCompleted();

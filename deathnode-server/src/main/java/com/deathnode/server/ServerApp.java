@@ -1,16 +1,17 @@
 package com.deathnode.server;
 
+import com.deathnode.server.grpc.Client;
 import com.deathnode.server.grpc.Connections;
 
 public class ServerApp {
 
-    private final Connections connections;
+    private final Client client;
 
     public ServerApp() {
-        this.connections = Connections.getInstance();
+        this.client = new Client();
     }
 
     public void collectReports() {
-        // TODO call for collection in peerStubs
+        // TODO call for collection using the client
     }
 }
