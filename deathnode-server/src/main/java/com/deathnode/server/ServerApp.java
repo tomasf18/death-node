@@ -6,8 +6,8 @@ public class ServerApp {
 
     private final Connections connections;
 
-    public ServerApp(Connections connections) {
-        this.connections = connections;
+    public ServerApp() {
+        this.connections = Connections.getInstance();
     }
 
     public void collectReports() {

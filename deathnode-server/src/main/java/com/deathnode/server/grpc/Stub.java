@@ -3,10 +3,10 @@ package com.deathnode.server.grpc;
 import com.deathnode.server.ServerApp;
 import io.grpc.stub.StreamObserver;
 
-public class ServerStub extends SyncServiceGrpc.SyncServiceImplBase {
+public class Stub extends SyncServiceGrpc.SyncServiceImplBase {
 
     private final ServerApp app;
-    public ServerStub(ServerApp app) {
+    public Stub(ServerApp app) {
         this.app = app;
     }
 

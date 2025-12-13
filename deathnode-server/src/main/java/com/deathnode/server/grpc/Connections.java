@@ -8,12 +8,17 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class Connections {
 
-    private final Map<String, SyncServiceGrpc.SyncServiceStub> peerStubs;
-    private final Map<String, ManagedChannel> connectedPeers;
+    private final Map<String, SyncServiceGrpc.SyncServiceStub> peerStubs = new ConcurrentHashMap<>();
+    private final Map<String, ManagedChannel> connectedPeers = new ConcurrentHashMap<>();;
 
-    public Connections() {
-        this.connectedPeers = new ConcurrentHashMap<>();
-        this.peerStubs = new ConcurrentHashMap<>();
+    private static Connections instance = null;
+    private Connections() {
+    }
+    public static Connections getInstance() {
+        if (instance == null) {
+            instance = new Connections();
+        }
+        return instance;
     }
 
     public void shutdown() {
@@ -37,5 +42,9 @@ public class Connections {
             return true;
         }
         return false;
+    }
+
+    public ManagedChannel getChannel(String nodeId) {
+        return connectedPeers.get(nodeId);
     }
 }

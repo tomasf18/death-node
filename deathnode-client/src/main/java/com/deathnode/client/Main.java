@@ -1,14 +1,21 @@
 package com.deathnode.client;
 
+import com.deathnode.client.grpc.Node;
+
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
 
 public class Main {
 
+    private static final int PORT = 9090;
+
     public static void main(String[] args) throws Exception {
 
         LocalDb db = new LocalDb();
         ClientService clientService = new ClientService(db);
+
+        Node clientNode = new Node(PORT);
+        clientNode.start();
 
         Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
 

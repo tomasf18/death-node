@@ -6,30 +6,30 @@ import io.grpc.ServerBuilder;
 
 import java.io.IOException;
 
-public class ServerNode {
+public class Node {
     private final int port;
     private final Server server;
     private final Connections connections;
     private final ServerApp app;
 
-    public ServerNode(int port) {
+    public Node(int port) {
         this.port = port;
 
-        this.connections = new Connections();
-        this.app = new ServerApp(connections);
+        this.connections = Connections.getInstance();
+        this.app = new ServerApp();
 
         this.server = ServerBuilder.forPort(port)
-                .addService(new ServerStub(app))
+                .addService(new Stub(app))
                 .build();
     }
 
     public void start() throws IOException {
         server.start();
-        System.out.println("✓ Servidor DeathNode initialized at port: " + port);
+        System.out.println("✓ DeathNode Server initialized at port: " + port);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("✗ Shutting down...");
-            ServerNode.this.stop();
+            Node.this.stop();
         }));
     }
 
@@ -38,12 +38,6 @@ public class ServerNode {
             server.shutdown();
         }
         connections.shutdown();
-    }
-
-    public void blockUntilShutdown() throws InterruptedException {
-        if (server != null) {
-            server.awaitTermination();
-        }
     }
 
     public void registerPeer(String nodeId, String host, int port) {
