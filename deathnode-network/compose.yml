@@ -1,0 +1,45 @@
+name: ${COMPOSE_PROJECT_NAME}
+
+services:
+  deathnode-db:
+    image: ${POSTGRES_IMAGE}
+    container_name: ${DB_CONTAINER_NAME}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_HOST_PORT}:${POSTGRES_CONTAINER_PORT}"
+    volumes:
+      - deathnode-db-data:/var/lib/postgresql
+      - ${DB_SCHEMA_HOST_PATH}:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # deathnode-server:
+  #   build: ${SERVER_BUILD_CONTEXT}
+  #   container_name: ${SERVER_CONTAINER_NAME}
+  #   depends_on:
+  #     deathnode-db:
+  #       condition: service_healthy
+  #   ports:
+  #     - "${SERVER_HOST_PORT}:${SERVER_CONTAINER_PORT}"
+  #   environment:
+  #     SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+  #     SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+  #     SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+  #     SERVER_PORT: ${SPRING_SERVER_PORT}
+  #     SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO}
+  #     SPRING_JPA_SHOW_SQL: ${SPRING_JPA_SHOW_SQL}
+  #     SPRING_STORAGE_ENVELOPES_PATH: ${SPRING_STORAGE_ENVELOPES_PATH}
+  #   volumes:
+  #     - ${SERVER_ENVELOPES_HOST_PATH}:${SERVER_ENVELOPES_CONTAINER_PATH}
+  #   restart: unless-stopped
+
+volumes:
+  deathnode-db-data:
