@@ -3,16 +3,12 @@ package com.deathnode.client.grpc;
 import com.deathnode.common.grpc.SyncServiceGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Manages gRPC connection to the server.
  * Singleton pattern for shared channel.
  */
 public class GrpcConnectionManager {
-
-    private static final Logger log = LoggerFactory.getLogger(GrpcConnectionManager.class);
 
     private final String serverHost;
     private final int serverPort;
@@ -32,7 +28,7 @@ public class GrpcConnectionManager {
             return; // Already connected
         }
 
-        log.info("Connecting to server at {}:{}", serverHost, serverPort);
+        System.out.println("Connecting to server at " + serverHost + ":" + serverPort);
 
         channel = ManagedChannelBuilder
                 .forAddress(serverHost, serverPort)
@@ -42,7 +38,7 @@ public class GrpcConnectionManager {
         asyncStub = SyncServiceGrpc.newStub(channel);
         blockingStub = SyncServiceGrpc.newBlockingStub(channel);
 
-        log.info("gRPC channel established");
+        System.out.println("gRPC channel established");
     }
 
     public SyncServiceGrpc.SyncServiceStub getAsyncStub() {
@@ -55,7 +51,7 @@ public class GrpcConnectionManager {
 
     public void shutdown() {
         if (channel != null) {
-            log.info("Shutting down gRPC channel");
+            System.out.println("Shutting down gRPC channel");
             channel.shutdown();
             try {
                 if (!channel.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {

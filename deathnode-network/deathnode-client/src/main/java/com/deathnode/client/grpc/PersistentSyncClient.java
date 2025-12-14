@@ -23,9 +23,8 @@ import java.util.concurrent.*;
  * enabling coordinated sync rounds across all nodes.
  */
 public class PersistentSyncClient {
-
-    private static final Logger log = LoggerFactory.getLogger(PersistentSyncClient.class);
     
+    private static final Logger log = LoggerFactory.getLogger(PersistentSyncClient.class);
     private final DatabaseService db;
     private final GrpcConnectionManager connectionManager;
     private final List<String> pendingEnvelopes = new CopyOnWriteArrayList<>();
@@ -44,13 +43,13 @@ public class PersistentSyncClient {
      * 
      * @param startSync If true, this client initiates a sync round
      */
-    public void connect(boolean startSync) {
+    public void connect() {
         if (connected) {
-            log.warn("Already connected");
+            System.out.println("Already connected");
             return;
         }
 
-        log.info("Connecting to server (startSync={})", startSync);
+        System.out.println("Connecting to server...");
 
         SyncServiceGrpc.SyncServiceStub asyncStub = connectionManager.getAsyncStub();
         
@@ -60,7 +59,7 @@ public class PersistentSyncClient {
         // Send Hello
         Hello hello = Hello.newBuilder()
                 .setNodeId(Config.NODE_SELF_ID)
-                .setStartSync(startSync)
+                .setStartSync(false)
                 .build();
 
         ClientMessage helloMsg = ClientMessage.newBuilder()
@@ -70,7 +69,7 @@ public class PersistentSyncClient {
         requestObserver.onNext(helloMsg);
         connected = true;
 
-        log.info("Connected to server");
+        System.out.println("Connected to server");
     }
 
     /**
@@ -94,10 +93,27 @@ public class PersistentSyncClient {
      */
     public void triggerSync() {
         if (!connected) {
-            connect(true);  // Connect with start_sync=true
-        } else {
-            log.info("Already connected - server may have active round");
+            System.out.println("Not connected - cannot trigger sync");
+            return;
         }
+
+        if (currentRoundId != null) {
+            System.out.println("Sync already in progress (round: " + currentRoundId + ")");
+            return;
+        }
+
+        System.out.println("Triggering sync round...");
+
+        Hello hello = Hello.newBuilder()
+                .setNodeId(Config.NODE_SELF_ID)
+                .setStartSync(true)
+                .build();
+
+        ClientMessage helloMsg = ClientMessage.newBuilder()
+                .setHello(hello)
+                .build();
+
+        requestObserver.onNext(helloMsg);
     }
 
     /**
@@ -108,7 +124,7 @@ public class PersistentSyncClient {
             try {
                 requestObserver.onCompleted();
             } catch (Exception e) {
-                log.warn("Error closing connection: {}", e.getMessage());
+                System.out.println("Error closing connection: " + e.getMessage());
             }
         }
         connected = false;
@@ -132,7 +148,7 @@ public class PersistentSyncClient {
                 } else if (serverMessage.hasSyncResult()) {
                     handleSyncResult(serverMessage.getSyncResult());
                 } else if (serverMessage.hasAck()) {
-                    log.info("Server ACK: {}", serverMessage.getAck().getMessage());
+                    System.out.println("Server ACK: " + serverMessage.getAck().getMessage());
                 } else if (serverMessage.hasError()) {
                     handleError(serverMessage.getError());
                 }
@@ -143,8 +159,7 @@ public class PersistentSyncClient {
 
         private void handleRequestBuffer(RequestBuffer request) {
             currentRoundId = request.getRoundId();
-            log.info("Server requested buffer for round: {} - sending {} envelopes", 
-                    currentRoundId, pendingEnvelopes.size());
+            System.out.println("Server requested buffer for round: " + currentRoundId + " - sending " + pendingEnvelopes.size() + " envelopes");
 
             try {
                 // Build BufferUpload
@@ -171,7 +186,7 @@ public class PersistentSyncClient {
                         builder.setLastEnvelopeHash(lastHash);
                     }
                 } catch (Exception e) {
-                    log.warn("Could not get last state: {}", e.getMessage());
+                    System.out.println("Could not get last state: " + e.getMessage());
                 }
 
                 // Send buffer
@@ -180,8 +195,7 @@ public class PersistentSyncClient {
                         .build();
 
                 requestObserver.onNext(msg);
-                log.info("Sent buffer with {} envelopes for round {}", 
-                        builder.getEnvelopesCount(), currentRoundId);
+                System.out.println("Sent buffer with " + builder.getEnvelopesCount() + " envelopes for round " + currentRoundId);
 
             } catch (Exception e) {
                 log.error("Failed to send buffer: {}", e.getMessage(), e);
@@ -189,8 +203,7 @@ public class PersistentSyncClient {
         }
 
         private void handleSyncResult(SyncResult result) {
-            log.info("Received SyncResult for round: {} ({} envelopes)", 
-                    result.getRoundId(), result.getOrderedEnvelopesCount());
+            System.out.println("Received SyncResult for round: " + result.getRoundId() + " (" + result.getOrderedEnvelopesCount() + " envelopes)");
 
             try {
                 int newEnvelopes = 0;
@@ -212,8 +225,7 @@ public class PersistentSyncClient {
                 pendingEnvelopes.clear();
                 currentRoundId = null;
 
-                log.info("Sync completed: {} new, {} existing envelopes", 
-                        newEnvelopes, existingEnvelopes);
+                System.out.println("Sync completed: " + newEnvelopes + " new, " + existingEnvelopes + " existing envelopes");
                 System.out.println(String.format(
                         "✓ Sync completed: %d new envelopes received (total: %d)", 
                         newEnvelopes, result.getOrderedEnvelopesCount()));
@@ -257,7 +269,7 @@ public class PersistentSyncClient {
                 long nodeSeq = envelope.getMetadata().getNodeSequenceNumber();
                 String prevHash = envelope.getMetadata().getPrevEnvelopeHash();
 
-                // Insert report (ignore if duplicate)
+                
                 try {
                     db.insertReport(hash, filePath.toString(), signer, nodeSeq, prevHash);
                 } catch (java.sql.SQLException e) {
@@ -268,7 +280,7 @@ public class PersistentSyncClient {
                 try {
                     db.upsertNodeState(signer, nodeSeq, hash);
                 } catch (Exception e) {
-                    log.warn("Failed to update node state for {}: {}", signer, e.getMessage());
+                    System.out.println("Failed to update node state for " + signer + ": " + e.getMessage());
                 }
 
                 return isNew;
@@ -292,7 +304,7 @@ public class PersistentSyncClient {
 
         @Override
         public void onCompleted() {
-            log.info("Server closed connection");
+            System.out.println("Server closed connection");
             connected = false;
         }
     }

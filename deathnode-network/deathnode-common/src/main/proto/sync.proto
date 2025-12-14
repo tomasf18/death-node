@@ -15,7 +15,7 @@ option java_multiple_files = true;
  */
 message Hello {
   string node_id = 1;
-  bool start_sync = 2;  // true if this node wants to initiate a sync round
+  bool start_sync = 2;  // true if this node wants to initiate a sync round, false if just to connect
 }
 
 /**
@@ -123,13 +123,6 @@ message ServerMessage {
 
 /**
  * Bidirectional streaming RPC for synchronization.
- * 
- * Flow:
- * 1. Client sends Hello
- * 2. Server responds with RequestBuffer
- * 3. Client sends BufferUpload
- * 4. Server collects from all nodes, orders, and sends SyncResult
- * 5. Stream closes
  */
 service SyncService {
   rpc Sync(stream ClientMessage) returns (stream ServerMessage);

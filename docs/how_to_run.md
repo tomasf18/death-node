@@ -1,29 +1,15 @@
-# server and database
-  
-## requirements
-- Docker
-- Docker Compose
+# database
 
-## Running the Server and Database
-To run the DeathNode server along with the PostgreSQL database, you can use Docker Compose.
-1. Ensure you have Docker and Docker Compose installed on your machine.
-2. Navigate to the root directory, containing the `compose.yml` file.
-3. Run the following command to start the services:
+docker run -d --name deathnode-db -e POSTGRES_DB=deathnode -e POSTGRES_USER=dn_admin -e POSTGRES_PASSWORD=dn_pass -p 5432:5432 postgres:18
 
-```sh
-docker compose up -d --build # you can omit -d to see the container logs
-```
+# at deathnode-network/
 
-## Accessing the Database
-To access the PostgreSQL database, you can use the `psql` command-line tool. If you have `psql` installed on your host machine, you can connect to the database with the following command:
+mvn clean install
 
-```sh
-psql -h localhost -U dn_admin -d deathnode
-```
+# sever 
 
-Then enter the password `dn_pass` when prompted.
+mvn spring-boot:run
 
-Parameters:
-- `-h localhost`: Specifies the host where the database is running.
-- `-U dn_admin`: Specifies the username to connect with.
-- `-d deathnode`: Specifies the database name to connect to.
+# client 
+
+java -jar target/deathnode-client-1.0.0.jar

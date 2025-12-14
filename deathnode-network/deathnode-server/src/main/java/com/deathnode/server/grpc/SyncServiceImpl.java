@@ -10,8 +10,6 @@ import com.deathnode.common.grpc.SyncResult;
 import com.deathnode.server.service.SyncCoordinator;
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * gRPC service implementation for bidirectional sync streaming.
@@ -21,12 +19,11 @@ import org.slf4j.LoggerFactory;
  * 2. Registers client with coordinator
  * 3. Sends RequestBuffer to client
  * 4. Receives BufferUpload from client
- * 5. When all nodes ready, sends SyncResult back
+ * 5. When all nodes have uploaded, computes SyncResult
+ * 6. Sends SyncResult to all clients
  */
 @GrpcService
 public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
-
-    private static final Logger log = LoggerFactory.getLogger(SyncServiceImpl.class);
     
     private final SyncCoordinator coordinator;
 
@@ -63,17 +60,17 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                 } else if (clientMessage.hasBufferUpload()) {
                     handleBufferUpload(clientMessage.getBufferUpload());
                 } else {
-                    log.warn("Received unknown client message type from {}", nodeId);
+                    System.out.println("Received unknown client message type from " + nodeId);
                 }
             } catch (Exception e) {
-                log.error("Error handling client message from {}: {}", nodeId, e.getMessage(), e);
+                System.out.println("Error handling client message from " + nodeId + ": " + e.getMessage());
                 sendError("INTERNAL_ERROR", "Failed to process message: " + e.getMessage());
             }
         }
 
         private void handleHello(Hello hello) {
             this.nodeId = hello.getNodeId();
-            log.info("Client {} connected, start_sync={}", nodeId, hello.getStartSync());
+            System.out.println("Client " + nodeId + " connected, start_sync=" + hello.getStartSync());
 
             // Register this client connection with coordinator FIRST
             SyncCoordinator.ClientConnection conn = new SyncCoordinator.ClientConnection(nodeId, responseObserver);
@@ -84,11 +81,11 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
             // The coordinator will broadcast RequestBuffer to ALL connected nodes
             if (hello.getStartSync()) {
                 String roundId = coordinator.startRoundIfAbsent(nodeId);
-                log.info("Client {} initiated sync round {}", nodeId, roundId);
+                System.out.println("Client " + nodeId + " initiated sync round " + roundId);
             } else {
                 // Just joining - if there's an active round, the broadcast already happened
                 // or will happen when another node starts sync
-                log.info("Client {} connected (not initiating sync)", nodeId);
+                System.out.println("Client " + nodeId + " connected (not initiating sync)");
             }
         }
 
@@ -96,13 +93,12 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
             String uploadNodeId = upload.getNodeId();
             
             if (!uploadNodeId.equals(nodeId)) {
-                log.warn("Node ID mismatch: stream={}, upload={}", nodeId, uploadNodeId);
+                System.out.println("Node ID mismatch: stream=" + nodeId + ", upload=" + uploadNodeId);
                 sendError("NODE_ID_MISMATCH", "Node ID in upload doesn't match connection");
                 return;
             }
 
-            log.info("Received buffer upload from {} with {} envelopes", 
-                    nodeId, upload.getEnvelopesCount());
+            System.out.println("Received buffer upload from " + nodeId + " with " + upload.getEnvelopesCount() + " envelopes");
 
             // Convert protobuf repeated bytes to List<byte[]>
             java.util.List<byte[]> envelopes = upload.getEnvelopesList().stream()
@@ -117,7 +113,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                 // When complete, send result to this client
                 future.whenComplete((result, error) -> {
                     if (error != null) {
-                        log.error("Sync round failed: {}", error.getMessage(), error);
+                        System.err.println("Sync round failed: " + error.getMessage());
                         sendError("SYNC_FAILED", error.getMessage());
                         responseObserver.onCompleted();
                     } else {
@@ -127,15 +123,14 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                 });
 
             } catch (Exception e) {
-                log.error("Failed to submit buffer for {}: {}", nodeId, e.getMessage(), e);
+                System.err.println("Failed to submit buffer for " + nodeId + ": " + e.getMessage());
                 sendError("SUBMIT_FAILED", e.getMessage());
                 responseObserver.onCompleted();
             }
         }
 
         private void sendSyncResult(SyncCoordinator.SyncResult result) {
-            log.info("Sending SyncResult to {} for round {} ({} envelopes)", 
-                    nodeId, result.roundId, result.orderedEnvelopes.size());
+            System.out.println("Sending SyncResult to " + nodeId + " for round " + result.roundId + " (" + result.orderedEnvelopes.size() + " envelopes)");
 
             SyncResult.Builder builder = SyncResult.newBuilder()
                     .setRoundId(result.roundId);
@@ -175,7 +170,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         @Override
         public void onError(Throwable t) {
-            log.error("Stream error for client {}: {}", nodeId, t.getMessage(), t);
+            System.err.println("Stream error for client " + nodeId + ": " + t.getMessage());
             if (registered) {
                 coordinator.unregisterClient(nodeId);
             }
@@ -183,7 +178,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         @Override
         public void onCompleted() {
-            log.info("Client {} closed connection", nodeId);
+            System.out.println("Client " + nodeId + " closed connection");
             if (registered) {
                 coordinator.unregisterClient(nodeId);
             }

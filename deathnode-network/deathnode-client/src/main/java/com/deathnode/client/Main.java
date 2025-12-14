@@ -8,8 +8,6 @@ import com.deathnode.client.service.DatabaseService;
 
 public class Main {
 
-    private static final int PORT = 9090;
-
     public static void main(String[] args) throws Exception {
 
         DatabaseService db = new DatabaseService();
@@ -38,6 +36,10 @@ public class Main {
 
                     case "list-reports":
                         clientService.listReports();
+                        break;
+
+                    case "sync":
+                        clientService.syncReports();
                         break;
 
                     case "help":

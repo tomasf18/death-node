@@ -1,7 +1,6 @@
 package com.deathnode.client.service;
 
 import com.deathnode.client.config.Config;
-import com.deathnode.client.grpc.GrpcSyncClient;
 import com.deathnode.client.grpc.PersistentSyncClient;
 import com.deathnode.client.utils.KeyUtils;
 import com.deathnode.common.model.*;
@@ -26,17 +25,14 @@ public class ClientService {
     
     private final DatabaseService db;
     private final PersistentSyncClient syncClient;
-    private final Gson gson = new GsonBuilder()
-            .disableHtmlEscaping()
-            .setPrettyPrinting()
-            .create();
+    private final Gson gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
 
     public ClientService(DatabaseService db) {
         this.db = db;
         this.syncClient = new PersistentSyncClient(db, Config.SERVER_HOST, Config.SERVER_PORT);
         
         // Connect to server immediately (without starting sync)
-        syncClient.connect(false);
+        syncClient.connect();
     }
 
     /**
