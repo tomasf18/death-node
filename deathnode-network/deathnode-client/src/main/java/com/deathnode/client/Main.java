@@ -42,6 +42,10 @@ public class Main {
                         clientService.syncReports();
                         break;
 
+                    case "reset-db": // DEBUGGING ONLY
+                        clientService.resetDatabase();
+                        break;
+
                     case "help":
                         printHelp();
                         break;
@@ -68,6 +72,8 @@ public class Main {
         System.out.println("  create-report     Create a new report interactively");
         System.out.println("  create-random     Create random reports from a premade list");
         System.out.println("  list-reports      List all reports");
+        System.out.println("  sync              Start synchronization with the server");
+        System.out.println("  reset-db          DEBUGGING ONLY: Reset the local database");
         System.out.println("  help              Show this help");
         System.out.println("  exit | q          Exit the client");
         System.out.println();

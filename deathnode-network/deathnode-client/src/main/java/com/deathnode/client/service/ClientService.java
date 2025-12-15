@@ -252,4 +252,12 @@ public class ClientService {
     public int getPendingReportsCount() {
         return syncClient.getPendingCount();
     }
+
+    /**
+     * DEBUGGING ONLY: Reset the local database (delete all data).
+     */
+    public void resetDatabase() throws Exception {
+        db.resetDatabase();
+        System.out.println("Local database reset complete.");
+    }
 }
