@@ -113,7 +113,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                         responseObserver.onCompleted();
                     } else {
                         sendSyncResult(result);
-                        responseObserver.onCompleted();
+                        // responseObserver.onCompleted();
                     }
                 });
 
