@@ -19,9 +19,9 @@ public class KeyUtils {
     // Helper: load private key from keystore (JKS) for given alias
     // -------------------------------
     public static PrivateKey loadPrivateKeyFromKeystore(String alias) throws Exception {
-        Path p = Paths.get(Config.KEYSTORE_PATH);
+        Path p = Paths.get(Config.getKeystorePath());
         if (!Files.exists(p)) {
-            throw new IllegalStateException("Keystore not found at: " + Config.KEYSTORE_PATH);
+            throw new IllegalStateException("Keystore not found at: " + Config.getKeystorePath());
         }
 
         String ksType = "JKS";

@@ -2,8 +2,8 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS nodes (
     node_id                 TEXT        PRIMARY KEY,
-    enc_pub_key             TEXT        NOT NULL,      -- RSA public key
-    sign_pub_key            TEXT        NOT NULL       -- Ed25519 public key
+    enc_pub_key             TEXT        NOT NULL,      
+    sign_pub_key            TEXT        NOT NULL      
 );
 
 CREATE TABLE IF NOT EXISTS nodes_state (
@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS nodes_state (
 CREATE TABLE IF NOT EXISTS reports (
     envelope_hash           TEXT        PRIMARY KEY,
     signer_node_id          TEXT        NOT NULL,
-    node_sequence_number    BIGINT      NOT NULL,  -- assigned by signer node
-    global_sequence_number  BIGINT, -- assigned by server; null for unsynced reports
+    node_sequence_number    BIGINT      NOT NULL,
+    global_sequence_number  BIGINT,
     metadata_timestamp      TIMESTAMP   NOT NULL,
     prev_envelope_hash      TEXT,
     file_path               TEXT        NOT NULL,
@@ -32,36 +32,36 @@ CREATE TABLE IF NOT EXISTS block_state (
     CHECK (id = 1)
 );
 
-
--- nodes for testing (private keys of this machine's node is in the keystore)
-INSERT OR REPLACE INTO nodes(node_id, enc_pub_key, sign_pub_key) -- self node
+INSERT OR REPLACE INTO nodes(node_id, enc_pub_key, sign_pub_key) 
 VALUES (
-  '1.1.1.1',
+  'nodeA',
   '-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAthoMm7MbxwtQDpJJhi9M
-TuwM2gO4xiB5M3kG6+cnWfkG65CxGymGJazl0j/6HPdPxQnH/cpgfZuAGIon63uD
-afWm3IxaWgeMt9++FuYrmSRj1iTcp7NnUFIxt3dpGgC7XGZurXB65VPcWH5FA2y6
-B50QSNeYkDh9CjaFTm1Pk4nU0b/8YoJxtmf+RDik8yqao/d3zGS7KCqIplqudmx3
-WpCgpbkdmMRSYKvU6XuF23Eef2FAtmyN/YKJRjrGOTn4Q/P8+lB7uIBub5LDtgtQ
-7m/7LKZM2rLkeKGl3kJlcWcFXqVON8kWMTjSlsd9hrrcQbwyo57H+/PaPCFm8d23
-BQIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2Ub5h/yfqbaVXH5Emy4e
+EnPXyURp/8klVFJ/baDEthfsChrENdREERp1xCA5/6YuYVeiAJQ6rMJkFHjMLDnc
+mBnCAx2/Fb542IZrAM7DGI+pQPp3gbt9WMq46gW6tyvRFupi+whEca4Xnckw55qM
+eZE7yX+Fqv8ekmPiNcikRjWYgucBoGib0QSQC0ThIl4rn/AWc8USTcOukziIlToS
+rfZK7aIGnwq6yM6aBq5HhNWQpsg5pqyZtrUFYurgycehh1qNuA0ILqwcgf7QAOrW
+mDn6CoSYks1UiJASJ2al0wp8/Fj35gVpPV2NaChd6QynjsmgV5LjOtNPj22nwhY/
+jwIDAQAB
 -----END PUBLIC KEY-----',
   '-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAiNLejZvOkRf87o97eoq7rHEfcAXvoRHJR2GoBw1o5Rs=
+MCowBQYDK2VwAyEAxp6F4FBZ3pb47kGYxmcvsAXCq6p+Uv6n26iyI1aVs0E=
 -----END PUBLIC KEY-----'
 );
 
 INSERT OR REPLACE INTO nodes(node_id, enc_pub_key, sign_pub_key)
 VALUES (
-  '2.2.2.2',
+  'nodeB',
   '-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuBLlWP1ueNOoB70iONaA
-PfImIUpzjfJkEwSrnvtaJ1GqiyaBxKKrK7D/GsNgdnTB7GAhHXJNuRUVLIUnmtEi
-xROWO+RxgWyKWFmwGmDWJn3bdMXJUjjsUzjLb/EDF4P6GgYULmhEJfhKyBb719J+
-fkmbEZjre4hnrk+ctLjJ2e7uW65u7y1KQ0khqp+WFvdX1KYtO76QB70MpPwnBoIi
-vikYrEGO7phOl2Il4Cu/9DQ8qzS6h37XGZ/L+bi2VfAm6dxGlyRIIUEjvm+A94dP
-ZJNehY118vMJVOKraJYqpq6TdNCv//Jqq4FR7umlyh7BKob8kq7kJxf/3p2Rg27c
-hwIDAQAB
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvt7yJvvyjRUw2hHDv27m
+Tz4teEkEWQDCHV1gBZlC75tPHMvwLBVsZJ2I9KEdeP/FiPA0b+hkiO//4s/DzJ2W
+hXTYeVlYl/D8nnTPJ6xd2I38dfKLPD3bWBViVhfLZ+q56Bgh0J0FS4e+wGaqRrZ5
+D4MxjtCPQLUaGB7mJUW5Xum2IFopz7fWmd0lcAG3XqRSnxNAntRpUCK0Z5epmTin
+bqYj7DbPCOMJt47qbNnSr2m1RkdbfSz1XpERZjeNA5Ysj0ZHtrs7ypyk7D24Aj+1
+olv60yS7CzmblFj8ylKPlyJRihm5FjNhW+7r4N7DcEmfv9K7S1TQfm+XkZW6FOrY
+3wIDAQAB
 -----END PUBLIC KEY-----',
-  'IGNORED_FOR_NOW'
+  '-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAbpf4IpdEFv/Az6nW5u7vE/j8q5oT2aDIcIVmKFheE8w=
+-----END PUBLIC KEY-----'
 );

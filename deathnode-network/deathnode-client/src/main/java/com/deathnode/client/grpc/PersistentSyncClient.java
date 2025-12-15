@@ -58,7 +58,7 @@ public class PersistentSyncClient {
 
         // Send Hello
         Hello hello = Hello.newBuilder()
-                .setNodeId(Config.NODE_SELF_ID)
+                .setNodeId(Config.getNodeSelfId())
                 .setStartSync(false)
                 .build();
 
@@ -105,7 +105,7 @@ public class PersistentSyncClient {
         System.out.println("Triggering sync round...");
 
         Hello hello = Hello.newBuilder()
-                .setNodeId(Config.NODE_SELF_ID)
+                .setNodeId(Config.getNodeSelfId())
                 .setStartSync(true)
                 .build();
 
@@ -164,7 +164,7 @@ public class PersistentSyncClient {
             try {
                 // Build BufferUpload
                 BufferUpload.Builder builder = BufferUpload.newBuilder()
-                        .setNodeId(Config.NODE_SELF_ID);
+                        .setNodeId(Config.getNodeSelfId());
 
                 // Add all pending envelopes
                 for (String pathStr : pendingEnvelopes) {
@@ -179,8 +179,8 @@ public class PersistentSyncClient {
 
                 // Add last known state
                 try {
-                    long lastSeq = db.getLastSequenceNumber(Config.NODE_SELF_ID);
-                    String lastHash = db.getLastEnvelopeHash(Config.NODE_SELF_ID);
+                    long lastSeq = db.getLastSequenceNumber(Config.getNodeSelfId());
+                    String lastHash = db.getLastEnvelopeHash(Config.getNodeSelfId());
                     builder.setLastNodeSequence(lastSeq);
                     if (lastHash != null) {
                         builder.setLastEnvelopeHash(lastHash);
@@ -239,7 +239,7 @@ public class PersistentSyncClient {
             try {
                 // Store file
                 String filename = hash + ".env";
-                Path outDir = Paths.get(Config.ENVELOPES_DIR);
+                Path outDir = Paths.get(Config.getEnvelopesDir());
                 Files.createDirectories(outDir);
                 Path filePath = outDir.resolve(filename);
 

@@ -71,15 +71,15 @@ public class ClientService {
         Report report = new Report();
         report.setReportId(reportId);
         report.setReportCreationTimestamp(timestamp);
-        report.setReporterPseudonym(Config.NODE_PSEUDONYM);
+        report.setReporterPseudonym(Config.getNodePseudonym());
         report.setContent(content);
         report.setVersion(1);
         report.setStatus("pending_validation");
 
         // 2. Prepare metadata
-        long lastSeq = db.getLastSequenceNumber(Config.NODE_SELF_ID);
+        long lastSeq = db.getLastSequenceNumber(Config.getNodeSelfId());
         long nextSeq = lastSeq + 1;
-        String prevHash = db.getLastEnvelopeHash(Config.NODE_SELF_ID);
+        String prevHash = db.getLastEnvelopeHash(Config.getNodeSelfId());
         if (prevHash == null) prevHash = "";
 
         Metadata metadata = new Metadata();
@@ -88,7 +88,7 @@ public class ClientService {
         metadata.setReportCreationTimestamp(timestamp);
         metadata.setNodeSequenceNumber(nextSeq);
         metadata.setPrevEnvelopeHash(prevHash);
-        metadata.setSignerNodeId(Config.NODE_SELF_ID);
+        metadata.setSignerNodeId(Config.getNodeSelfId());
         metadata.setSignerAlg("Ed25519");
 
         // 3. Load signing key (Ed25519)
@@ -107,7 +107,7 @@ public class ClientService {
         Envelope envelope = SecureDocumentProtocol.protect(report, metadata, recipients, signerPriv);
 
         // 6. Save envelope to disk
-        Path outDir = Paths.get(Config.ENVELOPES_DIR);
+        Path outDir = Paths.get(Config.getEnvelopesDir());
         Files.createDirectories(outDir);
         Path written = envelope.writeSelf(outDir);
         String envelopeHash = envelope.computeHashHex();
@@ -115,8 +115,8 @@ public class ClientService {
         log.info("Created envelope: {} (seq={})", written.getFileName(), nextSeq);
 
         // 7. Save to DB
-        db.insertReport(envelopeHash, written.toString(), Config.NODE_SELF_ID, nextSeq, prevHash);
-        db.upsertNodeState(Config.NODE_SELF_ID, nextSeq, envelopeHash);
+        db.insertReport(envelopeHash, written.toString(), Config.getNodeSelfId(), nextSeq, prevHash);
+        db.upsertNodeState(Config.getNodeSelfId(), nextSeq, envelopeHash);
 
         // 8. Add to pending buffer
         syncClient.addPendingEnvelope(written.toString());
@@ -211,7 +211,7 @@ public class ClientService {
 
                 // Decrypt and verify
                 Report decrypted = SecureDocumentProtocol.unprotect(
-                        envelope, rsaPriv, Config.NODE_SELF_ID, senderPub);
+                        envelope, rsaPriv, Config.getNodeSelfId(), senderPub);
 
                 System.out.println("  [OK] Report: " + decrypted.getReportId());
                 System.out.println("       Pseudonym: " + decrypted.getReporterPseudonym());
@@ -253,9 +253,6 @@ public class ClientService {
         return syncClient.getPendingCount();
     }
 
-    /**
-     * DEBUGGING ONLY: Reset the local database (delete all data).
-     */
     public void resetDatabase() throws Exception {
         db.resetDatabase();
         System.out.println("Local database reset complete.");

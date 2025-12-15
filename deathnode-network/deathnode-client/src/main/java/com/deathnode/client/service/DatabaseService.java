@@ -20,8 +20,14 @@ public class DatabaseService {
     private final String url;
 
     public DatabaseService() throws Exception {
-        Path dbPath = Paths.get(Config.SQLITE_DB);
+        Path dbPath = Paths.get(Config.getSqliteDb());
         Files.createDirectories(dbPath.getParent());
+        
+        // initialize database if it doesn't exist
+        if (!Files.exists(dbPath)) {
+            DatabaseInitializer.initializeDatabase();
+        }
+        
         this.url = "jdbc:sqlite:" + dbPath.toAbsolutePath();
     }
 
@@ -156,24 +162,12 @@ public class DatabaseService {
         public String filePath;
     }
 
-    /**
-     * DEBUGGING ONLY: Reset the local database (delete all data).
-     */
     public void resetDatabase() throws IOException, SQLException {
-        String sql1 = "DELETE FROM reports";
-        String sql2 = "DELETE FROM nodes_state";
-        String sql3 = "DELETE FROM block_state";
-        try (Connection c = conn(); 
-             PreparedStatement p1 = c.prepareStatement(sql1);
-             PreparedStatement p2 = c.prepareStatement(sql2);
-             PreparedStatement p3 = c.prepareStatement(sql3)) {
-            p1.executeUpdate();
-            p2.executeUpdate();
-            p3.executeUpdate();
-        }
+        // reset and reinitialize the database using DatabaseInitializer
+        DatabaseInitializer.resetDatabase();
 
         // delete all envelope files
-        Path envelopesDir = Paths.get(Config.ENVELOPES_DIR);
+        Path envelopesDir = Paths.get(Config.getEnvelopesDir());
         if (Files.exists(envelopesDir) && Files.isDirectory(envelopesDir)) {
             try (var stream = Files.list(envelopesDir)) {
                 stream.forEach(path -> {

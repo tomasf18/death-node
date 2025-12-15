@@ -1,386 +1,155 @@
-# DeathNode Client - Quickstart Guide
+## How to run
 
-This document shows how to fully initialize and run a **DeathNode client** from a clean machine:
+### 1. Build the Project
 
-- Data directories  
-- Keystore (JKS) with **private keys only**  
-- SQLite database with **public keys only**  
-- Building and launching the client  
-- Creating and verifying reports  
-
-This guide uses two test nodes:
-
-- **nodeA** -> self node (the machine running the client)
-- **nodeB** -> remote peer node
-
----
-
-## Note: For resets (empty database), use:
 ```bash
-cd deathnode-client/
-rm -f data/client.db
-mkdir -p data/envelopes
-sqlite3 data/client.db < client_schema.sql
-
-java -jar target/client.jar
+cd deathnode-network/
+mvn clean install
 ```
 
-# 1. Clean Start (Hard Reset Environment)
+The client JAR will be at: `deathnode-client/target/deathnode-client-1.0.0.jar`
 
-From the project root:
+### 2. Generate Keys for Nodes
+
+Use the new `keygen-nodes.sh` script to generate keys for one or more nodes:
 
 ```bash
 cd deathnode-client/
-rm -f data/client.db
-rm -rf data/envelopes/
-rm -f keys/keystore.jks
-mkdir -p data/envelopes
+
+# Generate keys for a single node
+./keygen-nodes.sh "nodeA"
+
+# Or generate keys for multiple nodes at once
+./keygen-nodes.sh "nodeA" "nodeB" "nodeC"
 ```
 
----
+**What this script does:**
+- Generates Ed25519 key pairs (for signing)
+- Generates RSA key pairs (for encryption)
+- Creates Java Keystores (JKS) with private keys
+- Stores public keys in `public_keys/` directory
+- Stores private keys and keystores in `data/<node-id>/keys/`
 
-# 2. Generate Cryptographic Keys
+**Generated structure:**
+```
+public_keys/
+├── nodeA_ed25519_pub.pem
+├── nodeA_rsa_pub.pem
+├── nodeB_ed25519_pub.pem
+└── nodeB_rsa_pub.pem
 
-You need **two key pairs** for your node:
+data/
+├── nodeA/
+│   ├── keys/
+│   │   ├── keystore.jks
+│   │   ├── nodeA_ed25519_priv.der
+│   │   ├── nodeA_ed25519_pub.pem
+│   │   ├── nodeA_rsa_priv.der
+│   │   └── nodeA_rsa_pub.pem
+│   ├── envelopes/
+│   └── client.db (created on first run)
+└── nodeB/
+    └── ...
+```
 
-| Purpose           | Algorithm | Where Stored               |
-| ----------------- | --------- | -------------------------- |
-| Encryption        | RSA       | JKS (private), DB (public) |
-| Digital Signature | Ed25519   | JKS (private), DB (public) |
+### 3. Modify Database Schema
 
----
+[client_schema.sql](./client_schema.sql) includes both DDL and DML statements to set up the database schema and insert public keys for the generated nodes.
+Go to [public_keys/](./public_keys/) and copy the public keys of each node into the appropriate `INSERT` statements in `client_schema.sql`, also inserting each node ID.
+**BE CAREFUL:** `enc_pub_key` is the RSA public key, while `sign_pub_key` is the Ed25519 public key. 
 
-## 2.1 Generate Ed25519 Signing Key
+### 4. Run a Client Node
 
 ```bash
-openssl genpkey -algorithm Ed25519 -out keys/nodeA_ed25519_priv.pem
-openssl pkey -in keys/nodeA_ed25519_priv.pem -pubout -out keys/nodeA_ed25519_pub.pem
 
-openssl genpkey -algorithm Ed25519 -out keys/nodeB_ed25519_priv.pem
-openssl pkey -in keys/nodeB_ed25519_priv.pem -pubout -out keys/nodeB_ed25519_pub.pem
-```
-
----
-
-## 2.2 Generate RSA Encryption Key
+### 4. Run a Client Node
 
 ```bash
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out keys/nodeA_rsa_priv.pem
-openssl pkey -in keys/nodeA_rsa_priv.pem -pubout -out keys/nodeA_rsa_pub.pem
+# With default pseudonym (randomly generated)
+java -jar target/deathnode-client-1.0.0.jar "nodeA"
 
-openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out keys/nodeB_rsa_priv.pem
-openssl pkey -in keys/nodeB_rsa_priv.pem -pubout -out keys/nodeB_rsa_pub.pem
+# With custom pseudonym
+java -jar target/deathnode-client-1.0.0.jar "nodeA" "shadow_fox"
+
+# Run another node
+java -jar target/deathnode-client-1.0.0.jar "nodeB" "night_owl"
 ```
 
+**On first run:**
+- The database will be automatically initialized using the schema from `client_schema.sql`
+- All necessary directories will be created
+- The client will be ready to create and sync reports
+
 ---
 
-# 3. Create the Java Keystore (JKS)
+## Configuration
 
-The keystore stores **PRIVATE KEYS ONLY**, but PKCS12 import **requires a certificate** for each private key.
+All client configuration is centralized in `src/main/java/com/deathnode/client/config/Config.java`:
+
+### Core Settings
+
+| Setting | Purpose |
+|---------|---------|
+| `NODE_SELF_ID` | Unique node identifier (set via CLI argument) |
+| `NODE_PSEUDONYM` | Reporter pseudonym (set via CLI, auto-generated if not provided) |
+| `SERVER_HOST` | gRPC server address (default: 127.0.0.1) |
+| `SERVER_PORT` | gRPC server port (default: 9090) |
+| `BUFFER_THRESHOLD_TO_SYNC` | Auto-sync after N pending reports (default: 2) |
+
+### Key & Database Paths
+
+All paths are dynamically generated based on `NODE_SELF_ID`:
+
+- **Database**: `data/<node-id>/client.db`
+- **Envelopes**: `data/<node-id>/envelopes/`
+- **Keystore**: `data/<node-id>/keys/keystore.jks`
+- **Node Keys**: `data/<node-id>/keys/`
+- **Public Keys**: `public_keys/`
+
+### Keystore Details
+
+- **Password**: `demonstration` (hardcoded for demo purposes)
+- **Ed25519 Alias**: `sign-key` (signing/digital signature)
+- **RSA Alias**: `rsa-key` (encryption)
 
 ---
 
-### 3.1 Create Empty Keystore
+## Advanced Usage
+
+### Multiple Nodes on Same Machine
+
+You can run multiple client instances on the same machine by using different node IDs:
 
 ```bash
-keytool -genkeypair \
-  -alias temp \
-  -keystore keys/keystore.jks \
-  -storepass demonstration \
-  -keyalg RSA \
-  -keysize 2048 \
-  -dname "CN=temp" \
-  -validity 365
+# Terminal 1
+java -jar target/deathnode-client-1.0.0.jar "nodeA" "node_a"
+
+# Terminal 2
+java -jar target/deathnode-client-1.0.0.jar "nodeB" "node_b"
+
+# Terminal 3
+java -jar target/deathnode-client-1.0.0.jar "nodeC" "node_c"
 ```
+
+Each maintains separate:
+- Database (`data/<node-id>/client.db`)
+- Envelopes (`data/<node-id>/envelopes/`)
+- Keystore (`data/<node-id>/keys/keystore.jks`)
+
+### Adding New Nodes
+
+To add a new node after initial setup:
+
+1. Generate its keys:
+   ```bash
+   ./keygen-nodes.sh "4.4.4.4"
+   ```
+
+2. Run the client:
+   ```bash
+   java -jar target/deathnode-client-1.0.0.jar "4.4.4.4"
+   ```
+
+3. Update the database schema to add the new node's public keys (or use a management utility).
 
 ---
-
-### 3.2 Generate Self-Signed Certificates for Node's Keys
-
-```bash
-# RSA certificate
-openssl req -new -x509 \
-  -key keys/nodeA_rsa_priv.pem \
-  -out keys/nodeA_rsa_cert.pem \
-  -days 365 \
-  -subj "/CN=A.A.A.A"
-
-# Ed25519 certificate
-openssl req -new -x509 \
-  -key keys/nodeA_ed25519_priv.pem \
-  -out keys/nodeA_ed25519_cert.pem \
-  -days 365 \
-  -subj "/CN=A.A.A.A"
-```
-
----
-
-### 3.3 Convert Node's Private Keys + Certificates to PKCS12
-
-```bash
-# RSA
-openssl pkcs12 -export \
-  -inkey keys/nodeA_rsa_priv.pem \
-  -in keys/nodeA_rsa_cert.pem \
-  -name rsa-key \
-  -out keys/nodeA_rsa.p12 \
-  -passout pass:demonstration
-
-# Ed25519
-openssl pkcs12 -export \
-  -inkey keys/nodeA_ed25519_priv.pem \
-  -in keys/nodeA_ed25519_cert.pem \
-  -name sign-key \
-  -out keys/nodeA_ed25519.p12 \
-  -passout pass:demonstration
-```
-
----
-
-### 3.4 Import PKCS12 Files into the JKS
-
-```bash
-# RSA key
-keytool -importkeystore \
-  -srckeystore keys/nodeA_rsa.p12 \
-  -srcstoretype PKCS12 \
-  -srcstorepass demonstration \
-  -destkeystore keys/keystore.jks \
-  -deststoretype JKS \
-  -deststorepass demonstration \
-  -alias rsa-key
-
-# Ed25519 key
-keytool -importkeystore \
-  -srckeystore keys/nodeA_ed25519.p12 \
-  -srcstoretype PKCS12 \
-  -srcstorepass demonstration \
-  -destkeystore keys/keystore.jks \
-  -deststoretype JKS \
-  -deststorepass demonstration \
-  -alias sign-key
-```
-
----
-
-### 3.5 Verify Keystore
-
-```bash
-keytool -list -keystore keys/keystore.jks -storepass demonstration
-```
-
-Expected:
-
-```
-rsa-key
-sign-key
-```
-
----
-
-# 4. Edit DB Schema File to Insert Public Keys into Database
-
----
-
-## 4.1 Insert nodeA (Self Node)
-
-```sql
-INSERT OR REPLACE INTO nodes(node_id, enc_pub_key, sign_pub_key)
-VALUES (
-  'A.A.A.A',
-  '-----BEGIN PUBLIC KEY-----
-<PASTE nodeA_rsa_pub.pem CONTENT HERE>
------END PUBLIC KEY-----',
-  '-----BEGIN PUBLIC KEY-----
-<PASTE nodeA_ed25519_pub.pem CONTENT HERE>
------END PUBLIC KEY-----'
-);
-```
-
----
-
-## 4.2 Insert nodeB (Remote Node)
-
-```sql
-INSERT OR REPLACE INTO nodes(node_id, enc_pub_key, sign_pub_key)
-VALUES (
-  'B.B.B.B',
-  '-----BEGIN PUBLIC KEY-----
-<PASTE nodeB_rsa_pub.pem CONTENT HERE>
------END PUBLIC KEY-----',
-  '-----BEGIN PUBLIC KEY-----
-<PASTE nodeB_ed25519_pub.pem CONTENT HERE>
------END PUBLIC KEY-----'
-);
-```
-
----
-
-# 5. Initialize SQLite Database
-
-Create DB:
-
-```bash
-sqlite3 data/client.db < client_schema.sql
-```
-
-Verify tables:
-
-```bash
-sqlite3 data/client.db ".tables"
-```
-
-Expected:
-
-```
-nodes
-nodes_state
-reports
-block_state
-```
-
----
-
-# 6. Build the Client
-
-```bash
-mvn clean package
-```
-
----
-
-# 7. Launch Client
-
-```bash
-java -jar target/client.jar
-```
-
-Expected:
-
-```
-DeathNode client started.
-Type 'help' to see available commands.
-deathnode-client>
-```
-
----
-
-# 8. Create a Report (Primary Test)
-
-```bash
-deathnode-client> create-report
-```
-
-You will be prompted:
-
-```
-Suspect:
-Description:
-Location:
-```
-
-Expected output:
-
-```
-Created envelope: <SHA256_HASH>.json
-```
-
----
-
-# 9. Verify Filesystem Output
-
-```bash
-ls data/envelopes/
-```
-
-You must see:
-
-```
-<hash>.json
-```
-
-Inspect contents:
-
-```bash
-cat data/envelopes/<hash>.json | jq .
-```
-
-You must see:
-
-* Metadata
-* Encrypted CEK map
-* Ciphertext
-* Digital signature
-
----
-
-# 10. Verify Database Writes
-
-```bash
-sqlite3 data/client.db
-.headers on
-.mode column
-```
-
-### Check reports table:
-
-```sql
-SELECT envelope_hash,
-       signer_node_id,
-       node_sequence_number,
-       prev_envelope_hash,
-       file_path
-FROM reports;
-```
-
-Expected:
-
-| envelope_hash | signer_node_id | node_sequence_number | prev_envelope_hash | file_path                    |
-| ------------- | -------------- | -------------------- | ------------------ | ---------------------------- |
-| `<hash>`      | `nodeA`        | `1`                  | empty              | `data/envelopes/<hash>.json` |
-
----
-
-### Check node state:
-
-```sql
-SELECT * FROM nodes_state;
-```
-
-Expected:
-
-| node_id | last_sequence_number | last_envelope_hash |
-| ------- | -------------------- | ------------------ |
-| nodeA   | 1                    | `<hash>`           |
-
----
-
-# 11. Create a Second Report (Chain Validation)
-
-```bash
-deathnode-client> create-report
-```
-
-Then:
-
-```sql
-SELECT node_sequence_number, prev_envelope_hash
-FROM reports
-ORDER BY node_sequence_number;
-```
-
-Expected:
-
-| seq | prev_envelope_hash |
-| --- | ------------------ |
-| 1   | empty              |
-| 2   | `<hash-of-1>`      |
-
-
----
-
-# 12. List Reports Command
-
-```bash
-deathnode-client> list-reports
-```
