@@ -31,7 +31,7 @@ public class ClientService {
         this.db = db;
         this.syncClient = new PersistentSyncClient(db, Config.SERVER_HOST, Config.SERVER_PORT);
         
-        // Connect to server immediately (without starting sync)
+        // connect to server immediately (without starting sync)
         syncClient.connect();
     }
 

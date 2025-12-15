@@ -1,16 +1,18 @@
 package com.deathnode.server.service;
 
+import com.deathnode.common.grpc.RequestBuffer;
+import com.deathnode.common.grpc.SyncResult;
 import com.deathnode.common.grpc.ServerMessage;
 import com.deathnode.common.model.Envelope;
+import com.deathnode.common.model.Metadata;
 import com.deathnode.common.util.HashUtils;
 import com.deathnode.server.entity.Node;
 import com.deathnode.server.entity.ReportEntity;
+import com.deathnode.server.grpc.SyncRound;
 import com.deathnode.server.repository.NodeRepository;
 import com.deathnode.server.repository.ReportRepository;
 import com.google.gson.*;
 import io.grpc.stub.StreamObserver;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,24 +27,16 @@ import java.util.stream.Collectors;
 
 /**
  * Coordinates synchronization rounds between clients.
- * 
- * Simplified version for now:
- * - Single active round at a time
- * - Simple timestamp-based ordering
- * - No security verifications yet (Merkle roots, signatures, etc.)
- * - Focus on getting the sync flow working
  */
 @Service
 public class SyncCoordinator {
-
-    private static final Logger log = LoggerFactory.getLogger(SyncCoordinator.class);
     
     private final NodeRepository nodeRepository;
     private final ReportRepository reportRepository;
     private final FileStorageService fileStorageService;
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().create();
-
-    // Active round state (simplified - single round for now)
+    private final Map<String, ClientConnection> allConnections = new HashMap<>();
+    
     private SyncRound activeRound = null;
     private final Object roundLock = new Object();
 
@@ -56,27 +50,23 @@ public class SyncCoordinator {
 
     /**
      * Start a sync round if none exists, or return existing round ID.
-     * If a NEW round is created, broadcasts RequestBuffer to all connected nodes.
      */
     public String startRoundIfAbsent(String initiatorNodeId) {
         synchronized (roundLock) {
             if (activeRound != null) {
-                log.info("Reusing existing round: {}", activeRound.roundId);
-                return activeRound.roundId;
+                System.out.println("Reusing existing round: " + activeRound.getRoundId());
+                return activeRound.getRoundId();
             }
 
-            // Create new round with all known nodes as participants
-            Set<String> expectedNodes = nodeRepository.findAll().stream()
-                    .map(Node::getNodeId)
-                    .collect(Collectors.toSet());
+            // Create new round with all known nodes as participants -> only the ones currently connected
+            Set<String> expectedNodes = allConnections.keySet().stream().collect(Collectors.toSet());
 
             String roundId = UUID.randomUUID().toString();
             activeRound = new SyncRound(roundId, expectedNodes, initiatorNodeId);
             
-            log.info("Started new sync round: {} (initiator: {}, expected nodes: {})", 
-                    roundId, initiatorNodeId, expectedNodes);
+            System.out.println("Started new sync round: " + roundId + " (initiator: " + initiatorNodeId + ", expected nodes: " + expectedNodes + ")");
             
-            // BROADCAST RequestBuffer to ALL connected nodes (including initiator)
+            // BROADCAST RequestBuffer to ALL currently registered connections
             broadcastRequestBuffer(roundId);
             
             return roundId;
@@ -84,59 +74,49 @@ public class SyncCoordinator {
     }
 
     /**
-     * Broadcast RequestBuffer to all currently connected nodes.
+     * Broadcast RequestBuffer to all currently registered connections.
      */
     private void broadcastRequestBuffer(String roundId) {
         if (activeRound == null) return;
 
-        com.deathnode.common.grpc.RequestBuffer request = 
-                com.deathnode.common.grpc.RequestBuffer.newBuilder()
+        RequestBuffer request = 
+                RequestBuffer.newBuilder()
                 .setRoundId(roundId)
                 .setMessage("Sync round started - please send your buffer")
                 .build();
 
-        com.deathnode.common.grpc.ServerMessage msg = 
-                com.deathnode.common.grpc.ServerMessage.newBuilder()
+        ServerMessage msg = 
+                ServerMessage.newBuilder()
                 .setRequestBuffer(request)
                 .build();
 
+        // Broadcast to all registered connections
         synchronized (roundLock) {
-            for (ClientConnection conn : activeRound.connections.values()) {
+            for (ClientConnection conn : allConnections.values()) {
                 try {
                     conn.observer.onNext(msg);
-                    log.info("Sent RequestBuffer to node: {}", conn.nodeId);
+                    System.out.println("Sent RequestBuffer to node: " + conn.nodeId);
                 } catch (Exception e) {
-                    log.error("Failed to send RequestBuffer to {}: {}", 
-                            conn.nodeId, e.getMessage());
+                    System.out.println("Failed to send RequestBuffer to " + conn.nodeId + ": " + e.getMessage());
                 }
             }
         }
     }
 
     /**
-     * Register a client connection for the active round.
+     * Register a client connection.
      */
-    public void registerClient(String nodeId, ClientConnection connection) {
-        synchronized (roundLock) {
-            if (activeRound == null) {
-                log.warn("Cannot register client {} - no active round", nodeId);
-                return;
-            }
-            activeRound.registerConnection(nodeId, connection);
-            log.info("Registered client {} for round {}", nodeId, activeRound.roundId);
-        }
+    public synchronized void registerClient(String nodeId, ClientConnection connection) {
+        allConnections.put(nodeId, connection);
+        System.out.println("Registered client connection: " + nodeId);
     }
 
     /**
      * Unregister a client connection.
      */
-    public void unregisterClient(String nodeId) {
-        synchronized (roundLock) {
-            if (activeRound != null) {
-                activeRound.unregisterConnection(nodeId);
-                log.info("Unregistered client {} from round {}", nodeId, activeRound.roundId);
-            }
-        }
+    public synchronized void unregisterClient(String nodeId) {
+        allConnections.remove(nodeId);
+        System.out.println("Unregistered client connection: " + nodeId);
     }
 
     /**
@@ -150,14 +130,13 @@ public class SyncCoordinator {
                         new IllegalStateException("No active round"));
             }
 
-            log.info("Node {} submitted {} envelopes to round {}", 
-                    nodeId, envelopes.size(), activeRound.roundId);
+            System.out.println("Node " + nodeId + " submitted " + envelopes.size() + " envelopes to round " + activeRound.roundId);
 
             activeRound.putBuffer(nodeId, envelopes);
 
             // Check if round is complete (all expected nodes submitted)
             if (activeRound.isComplete()) {
-                log.info("Round {} is complete - finalizing", activeRound.roundId);
+                System.out.println("Round " + activeRound.roundId + " is complete - finalizing");
                 
                 // Finalize asynchronously
                 SyncRound round = activeRound;
@@ -178,7 +157,7 @@ public class SyncCoordinator {
      */
     @Transactional
     protected SyncResult finalizeRound(SyncRound round) {
-        log.info("Finalizing round: {}", round.roundId);
+        System.out.println("Finalizing round: " + round.roundId);
 
         // 1. Collect all envelopes with metadata
         List<EnvelopeWithMeta> allEnvelopes = new ArrayList<>();
@@ -188,7 +167,7 @@ public class SyncCoordinator {
             Node signerNode = nodeRepository.findByNodeId(nodeId);
             
             if (signerNode == null) {
-                log.warn("Unknown node {} in round {} - skipping", nodeId, round.roundId);
+                System.out.println("Unknown node " + nodeId + " in round " + round.roundId + " - skipping");
                 continue;
             }
 
@@ -200,16 +179,16 @@ public class SyncCoordinator {
                     Envelope envelope = Envelope.fromJson(jsonObj);
                     
                     // Extract timestamp for ordering
-                    String tsStr = envelope.getMetadata().getMetadataTimestamp();
+                    Metadata metadata = envelope.getMetadata();
+                    String tsStr = metadata.getMetadataTimestamp();
                     Instant timestamp = Instant.parse(tsStr);
                     
                     String hash = HashUtils.sha256Hex(envelopeBytes);
                     
-                    allEnvelopes.add(new EnvelopeWithMeta(
-                            signerNode, envelopeBytes, hash, envelope, timestamp));
+                    allEnvelopes.add(new EnvelopeWithMeta(signerNode, envelopeBytes, hash, envelope, timestamp));
                     
                 } catch (Exception e) {
-                    log.error("Failed to parse envelope from {}: {}", nodeId, e.getMessage(), e);
+                    System.out.println("Failed to parse envelope from " + nodeId + ": " + e.getMessage());
                     // TODO: In future, reject entire round on parse failure
                 }
             }
@@ -221,7 +200,7 @@ public class SyncCoordinator {
                 .thenComparing(e -> e.signerNode.getNodeId())
                 .thenComparingLong(e -> e.envelope.getMetadata().getNodeSequenceNumber()));
 
-        log.info("Ordered {} envelopes for round {}", allEnvelopes.size(), round.roundId);
+        System.out.println("Ordered " + allEnvelopes.size() + " envelopes for round " + round.roundId);
 
         // 3. Persist each envelope to file and database
         List<byte[]> orderedBytes = new ArrayList<>();
@@ -230,9 +209,9 @@ public class SyncCoordinator {
 
         for (EnvelopeWithMeta meta : allEnvelopes) {
             try {
-                // Store file
-                String filename = meta.hash + ".env";
-                Path filePath = fileStorageService.store(meta.envelopeBytes, filename);
+                // Store file in node-specific directory
+                String filename = meta.hash + ".json";
+                Path filePath = fileStorageService.store(meta.envelopeBytes, filename, meta.signerNode.getNodeId());
 
                 // Create DB entity
                 ReportEntity entity = new ReportEntity();
@@ -249,10 +228,10 @@ public class SyncCoordinator {
                 orderedBytes.add(meta.envelopeBytes);
                 orderedHashes.add(meta.hash);
 
-                log.debug("Persisted envelope: {} (global_seq={})", meta.hash, entity.getGlobalSequenceNumber());
+                System.out.println("Persisted envelope: " + meta.hash + " (global_seq=" + entity.getGlobalSequenceNumber() + ")");
 
             } catch (Exception e) {
-                log.error("Failed to persist envelope {}: {}", meta.hash, e.getMessage(), e);
+                System.out.println("Failed to persist envelope " + meta.hash + ": " + e.getMessage());
                 // TODO: In future, rollback entire round on persistence failure
             }
         }
@@ -266,7 +245,7 @@ public class SyncCoordinator {
         // 5. Complete the round's future
         round.completionFuture.complete(result);
 
-        log.info("Round {} finalized with {} envelopes", round.roundId, orderedBytes.size());
+        System.out.println("Round " + round.roundId + " finalized with " + orderedBytes.size() + " envelopes");
         
         return result;
     }
@@ -277,44 +256,6 @@ public class SyncCoordinator {
     }
 
     // ========== Helper Classes ==========
-
-    /**
-     * Represents an active synchronization round.
-     */
-    public static class SyncRound {
-        final String roundId;
-        final Set<String> expectedNodes;
-        final String initiator;
-        final Map<String, List<byte[]>> buffers = new HashMap<>();
-        final Map<String, ClientConnection> connections = new HashMap<>();
-        final CompletableFuture<SyncResult> completionFuture = new CompletableFuture<>();
-
-        public SyncRound(String roundId, Set<String> expectedNodes, String initiator) {
-            this.roundId = roundId;
-            this.expectedNodes = new HashSet<>(expectedNodes);
-            this.initiator = initiator;
-        }
-
-        public synchronized void registerConnection(String nodeId, ClientConnection conn) {
-            connections.put(nodeId, conn);
-        }
-
-        public synchronized void unregisterConnection(String nodeId) {
-            connections.remove(nodeId);
-        }
-
-        public synchronized void putBuffer(String nodeId, List<byte[]> envelopes) {
-            buffers.put(nodeId, envelopes);
-        }
-
-        public synchronized boolean isComplete() {
-            return buffers.keySet().containsAll(expectedNodes);
-        }
-
-        public synchronized Map<String, List<byte[]>> getBuffers() {
-            return new HashMap<>(buffers);
-        }
-    }
 
     /**
      * Result of a completed sync round.

@@ -10,27 +10,24 @@ import java.util.concurrent.CompletableFuture;
 import com.deathnode.server.service.SyncCoordinator;
 
 /**
- * Lightweight round state holder
+ * Lightweight round state holder.
  */
 public class SyncRound {
-    private final String roundId;
-    private final Set<String> expectedNodes;
-    private final Map<String, List<byte[]>> buffers = new HashMap<>();
-    private final Map<String, SyncCoordinator.ClientConnection> connections = new HashMap<>();
-    private final CompletableFuture<SyncCoordinator.SyncResult> completionFuture = new CompletableFuture<>();
-    private String initiator;
+    public final String roundId;
+    public final Set<String> expectedNodes;
+    public final String initiator;
+    public final Map<String, List<byte[]>> buffers = new HashMap<>();
+    public final CompletableFuture<SyncCoordinator.SyncResult> completionFuture = new CompletableFuture<>();
 
-    public SyncRound(String roundId, Set<String> expectedNodes) {
+    public SyncRound(String roundId, Set<String> expectedNodes, String initiator) {
         this.roundId = roundId;
         this.expectedNodes = new HashSet<>(expectedNodes);
+        this.initiator = initiator;
     }
 
     public String getRoundId(){ return roundId; }
     public Set<String> getExpectedNodes(){ return Collections.unmodifiableSet(expectedNodes); }
-
-    public synchronized void registerConnection(String nodeId, SyncCoordinator.ClientConnection conn) {
-        connections.put(nodeId, conn);
-    }
+    public String getInitiator() { return initiator; }
 
     public synchronized void putBuffer(String nodeId, List<byte[]> envelopes) {
         buffers.put(nodeId, envelopes);
@@ -51,7 +48,4 @@ public class SyncRound {
     public void complete(SyncCoordinator.SyncResult result) {
         completionFuture.complete(result);
     }
-
-    public void setInitiator(String initiator) { this.initiator = initiator; }
-    public String getInitiator() { return initiator; }
 }

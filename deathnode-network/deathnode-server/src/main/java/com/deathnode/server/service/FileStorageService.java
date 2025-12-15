@@ -18,6 +18,21 @@ public class FileStorageService {
         Files.createDirectories(this.basePath); // auto-create if missing
     }
 
+    /**
+     * Store a file in a node-specific directory.
+     * Files are stored under "basePath/<nodeId>_envelopes/filename"
+     */
+    public Path store(byte[] data, String filename, String nodeId) throws IOException {
+        Path nodeDir = basePath.resolve(nodeId + "_envelopes");
+        Files.createDirectories(nodeDir);
+        Path target = nodeDir.resolve(filename);
+        Files.write(target, data, StandardOpenOption.CREATE_NEW);
+        return target;
+    }
+
+    /**
+     * Legacy store method for backward compatibility (stores in base directory).
+     */
     public Path store(byte[] data, String filename) throws IOException {
         Path target = basePath.resolve(filename);
         Files.write(target, data, StandardOpenOption.CREATE_NEW);
@@ -39,5 +54,9 @@ public class FileStorageService {
 
     public Path getFullPath(String filename) {
         return basePath.resolve(filename);
+    }
+
+    public Path getBasePath() {
+        return basePath;
     }
 }

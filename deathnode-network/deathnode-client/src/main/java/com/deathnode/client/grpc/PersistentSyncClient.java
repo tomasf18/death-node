@@ -8,8 +8,6 @@ import com.deathnode.common.util.HashUtils;
 import com.google.gson.*;
 import com.google.protobuf.ByteString;
 import io.grpc.stub.StreamObserver;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -23,8 +21,6 @@ import java.util.concurrent.*;
  * enabling coordinated sync rounds across all nodes.
  */
 public class PersistentSyncClient {
-    
-    private static final Logger log = LoggerFactory.getLogger(PersistentSyncClient.class);
     private final DatabaseService db;
     private final GrpcConnectionManager connectionManager;
     private final List<String> pendingEnvelopes = new CopyOnWriteArrayList<>();
@@ -77,8 +73,7 @@ public class PersistentSyncClient {
      */
     public void addPendingEnvelope(String envelopeFilePath) {
         pendingEnvelopes.add(envelopeFilePath);
-        log.debug("Added envelope to buffer: {} (total: {})", 
-                Paths.get(envelopeFilePath).getFileName(), pendingEnvelopes.size());
+        System.out.println("Added envelope to buffer: " + Paths.get(envelopeFilePath).getFileName() + " (total: " + pendingEnvelopes.size() + ")");
     }
 
     /**
@@ -153,7 +148,7 @@ public class PersistentSyncClient {
                     handleError(serverMessage.getError());
                 }
             } catch (Exception e) {
-                log.error("Error handling server message: {}", e.getMessage(), e);
+                System.out.println("Error handling server message: " + e.getMessage());
             }
         }
 
@@ -173,7 +168,7 @@ public class PersistentSyncClient {
                         byte[] envelopeBytes = Files.readAllBytes(path);
                         builder.addEnvelopes(ByteString.copyFrom(envelopeBytes));
                     } catch (Exception e) {
-                        log.error("Failed to read envelope {}: {}", pathStr, e.getMessage());
+                        System.err.println("Failed to read envelope " + pathStr + ": " + e.getMessage());
                     }
                 }
 
@@ -198,7 +193,7 @@ public class PersistentSyncClient {
                 System.out.println("Sent buffer with " + builder.getEnvelopesCount() + " envelopes for round " + currentRoundId);
 
             } catch (Exception e) {
-                log.error("Failed to send buffer: {}", e.getMessage(), e);
+                System.err.println("Failed to send buffer: " + e.getMessage());
             }
         }
 
@@ -226,19 +221,17 @@ public class PersistentSyncClient {
                 currentRoundId = null;
 
                 System.out.println("Sync completed: " + newEnvelopes + " new, " + existingEnvelopes + " existing envelopes");
-                System.out.println(String.format(
-                        "✓ Sync completed: %d new envelopes received (total: %d)", 
-                        newEnvelopes, result.getOrderedEnvelopesCount()));
+                System.out.println(String.format("Sync completed: %d new envelopes received (total: %d)", newEnvelopes, result.getOrderedEnvelopesCount()));
 
             } catch (Exception e) {
-                log.error("Failed to process SyncResult: {}", e.getMessage(), e);
+                System.err.println("Failed to process SyncResult: " + e.getMessage());
             }
         }
 
         private boolean processReceivedEnvelope(byte[] envelopeBytes, String hash) {
             try {
                 // Store file
-                String filename = hash + ".env";
+                String filename = hash + ".json";
                 Path outDir = Paths.get(Config.getEnvelopesDir());
                 Files.createDirectories(outDir);
                 Path filePath = outDir.resolve(filename);
@@ -250,14 +243,13 @@ public class PersistentSyncClient {
                     byte[] existing = Files.readAllBytes(filePath);
                     String existingHash = HashUtils.sha256Hex(existing);
                     if (!existingHash.equals(hash)) {
-                        log.error("Hash mismatch for {}: expected={}, found={}", 
-                                filename, hash, existingHash);
+                        System.err.println("Hash mismatch for " + filename + ": expected=" + hash + ", found=" + existingHash);
                         return false;
                     }
                 } else {
                     Files.write(filePath, envelopeBytes, StandardOpenOption.CREATE_NEW);
                     isNew = true;
-                    log.debug("Stored new envelope: {}", filename);
+                    System.out.println("Stored new envelope: " + filename);
                 }
 
                 // Parse and update DB
@@ -286,19 +278,18 @@ public class PersistentSyncClient {
                 return isNew;
 
             } catch (Exception e) {
-                log.error("Failed to process envelope {}: {}", hash, e.getMessage());
+                System.err.println("Failed to process envelope " + hash + ": " + e.getMessage());
                 return false;
             }
         }
 
         private void handleError(com.deathnode.common.grpc.Error error) {
-            log.error("Server error [{}]: {}", error.getCode(), error.getMessage());
-            System.err.println("Server error: " + error.getMessage());
+            System.err.println("Server error [" + error.getCode() + "]: " + error.getMessage());
         }
 
         @Override
         public void onError(Throwable t) {
-            log.error("gRPC stream error: {}", t.getMessage(), t);
+            System.err.println("gRPC stream error: " + t.getMessage());
             connected = false;
         }
 

@@ -1,4 +1,4 @@
-## How to run
+## How to run with current configuration
 
 ### 1. Build the Project
 
@@ -7,7 +7,48 @@ cd deathnode-network/
 mvn clean install
 ```
 
-The client JAR will be at: `deathnode-client/target/deathnode-client-1.0.0.jar`
+### 2. Run the Database
+
+```bash
+docker run -d --name deathnode-db -e POSTGRES_DB=deathnode -e POSTGRES_USER=dn_admin -e POSTGRES_PASSWORD=dn_pass -p 5432:5432 postgres:18
+```
+
+### 3. Apply Database Schema
+
+```bash
+psql -h localhost -U dn_admin -d deathnode -f deathnode-database/server_schema.sql
+
+Password for user dn_admin: dn_pass
+```
+
+### 4. Start server
+
+```bash
+cd deathnode-server/
+mvn spring-boot:run
+```
+
+### 5. Run client nodeA
+
+```bash
+java -jar deathnode-client/target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
+```
+
+### 6. Run client nodeB
+
+```bash
+java -jar deathnode-client/target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"
+```
+---
+
+## How to run from scratch
+
+### 1. Build the Project
+
+```bash
+cd deathnode-network/
+mvn clean install
+```
 
 ### 2. Generate Keys for Nodes
 
@@ -52,17 +93,31 @@ data/
     └── ...
 ```
 
-### 3. Modify Database Schema
+### 3. Update Client Database Schema
 
 [client_schema.sql](./client_schema.sql) includes both DDL and DML statements to set up the database schema and insert public keys for the generated nodes.
 Go to [public_keys/](./public_keys/) and copy the public keys of each node into the appropriate `INSERT` statements in `client_schema.sql`, also inserting each node ID.
 **BE CAREFUL:** `enc_pub_key` is the RSA public key, while `sign_pub_key` is the Ed25519 public key. 
 
-### 4. Run a Client Node
+### 4. Update Server Database Schema
+
+[server_schema.sql](../deathnode-database/server_schema.sql) includes both DDL and DML statements to set up the server database schema and insert public keys for the generated nodes.
+Please update that file according to the nodes you generated, similar to the client schema update.
+
+### 5. Apply Database Schema
+
+```bash 
+psql -h localhost -U dn_admin -d deathnode -f deathnode-database/server_schema.sql
+```
+
+### 6. Start the Server
 
 ```bash
+cd ../deathnode-server/
+mvn spring-boot:run
+```
 
-### 4. Run a Client Node
+### 7. Run a Client Node
 
 ```bash
 # With default pseudonym (randomly generated)
@@ -74,11 +129,6 @@ java -jar target/deathnode-client-1.0.0.jar "nodeA" "shadow_fox"
 # Run another node
 java -jar target/deathnode-client-1.0.0.jar "nodeB" "night_owl"
 ```
-
-**On first run:**
-- The database will be automatically initialized using the schema from `client_schema.sql`
-- All necessary directories will be created
-- The client will be ready to create and sync reports
 
 ---
 

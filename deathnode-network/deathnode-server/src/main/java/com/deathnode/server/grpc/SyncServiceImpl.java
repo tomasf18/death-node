@@ -11,6 +11,10 @@ import com.deathnode.server.service.SyncCoordinator;
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
 
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import com.google.protobuf.ByteString;
+
 /**
  * gRPC service implementation for bidirectional sync streaming.
  * 
@@ -37,7 +41,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
     }
 
     /**
-     * Inner class to handle a single client's stream.
+     * handle a single client's stream.
      */
     private static class ClientStreamHandler implements StreamObserver<ClientMessage> {
         
@@ -46,8 +50,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
         private String nodeId;
         private boolean registered = false;
 
-        public ClientStreamHandler(StreamObserver<ServerMessage> responseObserver, 
-                                  SyncCoordinator coordinator) {
+        public ClientStreamHandler(StreamObserver<ServerMessage> responseObserver, SyncCoordinator coordinator) {
             this.responseObserver = responseObserver;
             this.coordinator = coordinator;
         }
@@ -70,22 +73,15 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         private void handleHello(Hello hello) {
             this.nodeId = hello.getNodeId();
-            System.out.println("Client " + nodeId + " connected, start_sync=" + hello.getStartSync());
-
-            // Register this client connection with coordinator FIRST
-            SyncCoordinator.ClientConnection conn = new SyncCoordinator.ClientConnection(nodeId, responseObserver);
-            coordinator.registerClient(nodeId, conn);
-            registered = true;
-
-            // If this client wants to start a sync, create/join round
-            // The coordinator will broadcast RequestBuffer to ALL connected nodes
+            
             if (hello.getStartSync()) {
                 String roundId = coordinator.startRoundIfAbsent(nodeId);
                 System.out.println("Client " + nodeId + " initiated sync round " + roundId);
             } else {
-                // Just joining - if there's an active round, the broadcast already happened
-                // or will happen when another node starts sync
-                System.out.println("Client " + nodeId + " connected (not initiating sync)");
+                SyncCoordinator.ClientConnection conn = new SyncCoordinator.ClientConnection(nodeId, responseObserver);
+                coordinator.registerClient(nodeId, conn);
+                registered = true;
+                System.out.println("Client " + nodeId + " connected");
             }
         }
 
@@ -101,14 +97,13 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
             System.out.println("Received buffer upload from " + nodeId + " with " + upload.getEnvelopesCount() + " envelopes");
 
             // Convert protobuf repeated bytes to List<byte[]>
-            java.util.List<byte[]> envelopes = upload.getEnvelopesList().stream()
-                    .map(com.google.protobuf.ByteString::toByteArray)
+            List<byte[]> envelopes = upload.getEnvelopesList().stream()
+                    .map(ByteString::toByteArray)
                     .toList();
 
             try {
                 // Submit buffer to coordinator and get future
-                java.util.concurrent.CompletableFuture<SyncCoordinator.SyncResult> future = 
-                        coordinator.submitBuffer(nodeId, envelopes);
+                CompletableFuture<SyncCoordinator.SyncResult> future = coordinator.submitBuffer(nodeId, envelopes);
 
                 // When complete, send result to this client
                 future.whenComplete((result, error) -> {
@@ -137,7 +132,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
             // Add all ordered envelopes
             for (byte[] env : result.orderedEnvelopes) {
-                builder.addOrderedEnvelopes(com.google.protobuf.ByteString.copyFrom(env));
+                builder.addOrderedEnvelopes(ByteString.copyFrom(env));
             }
 
             // Add corresponding hashes
