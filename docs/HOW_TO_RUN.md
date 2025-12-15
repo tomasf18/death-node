@@ -17,9 +17,8 @@ docker run -d --name deathnode-db -e POSTGRES_DB=deathnode -e POSTGRES_USER=dn_a
 
 ```bash
 psql -h localhost -U dn_admin -d deathnode -f deathnode-database/server_schema.sql
-
-Password for user dn_admin: dn_pass
 ```
+> Password for user dn_admin: dn_pass
 
 ### 4. Start server
 
@@ -31,13 +30,15 @@ mvn spring-boot:run
 ### 5. Run client nodeA
 
 ```bash
-java -jar deathnode-client/target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
+cd deathnode-client/
+java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
 ```
 
 ### 6. Run client nodeB
 
 ```bash
-java -jar deathnode-client/target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"
+cd deathnode-client/
+java -jar target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"
 ```
 ---
 

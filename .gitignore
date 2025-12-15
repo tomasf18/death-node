@@ -482,7 +482,6 @@ env.bak/
 venv.bak/
 
 .mvn/
-data/
 
 # Spyder project settings
 .spyderproject
@@ -631,12 +630,12 @@ build/
 
 
 # All keys .der and .pem inside /keys/ directory
-*.der
-*.pem
-*.json
-*.b64
-*.jks
-*.p12
+# *.der
+# *.pem
+# *.json
+# *.b64
+# *.jks
+# *.p12
 
 # allow test reports
 !deathnode-client/test-reports/

@@ -38,15 +38,15 @@ public class Config {
     }
 
     public static String getEnvelopesDir() {
-        return "data/" + NODE_SELF_ID + "/envelopes/";
+        return "client-data/" + NODE_SELF_ID + "/envelopes/";
     }
 
     public static String getSqliteDb() {
-        return "data/" + NODE_SELF_ID + "/client.db";
+        return "client-data/" + NODE_SELF_ID + "/client.db";
     }
 
     public static String getKeystorePath() {
-        return "data/" + NODE_SELF_ID + "/keys/keystore.jks";
+        return "client-data/" + NODE_SELF_ID + "/keys/keystore.jks";
     }
 
     public static String getPublicKeysDir() {
@@ -54,7 +54,7 @@ public class Config {
     }
 
     public static String getNodeKeysDir() {
-        return "data/" + NODE_SELF_ID + "/keys/";
+        return "client-data/" + NODE_SELF_ID + "/keys/";
     }
 
     private static String generateRandomPseudonym() {

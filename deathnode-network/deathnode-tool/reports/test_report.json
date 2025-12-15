@@ -1,0 +1,12 @@
+{
+  "report_id": "test-001",
+  "report_creation_timestamp": "2025-12-07T10:00:00Z",
+  "reporter_pseudonym": "test_user",
+  "content": {
+    "suspect": "suspect_name",
+    "description": "Test description",
+    "location": "Test location"
+  },
+  "version": 1,
+  "status": "pending_validation"
+}

@@ -1,0 +1,28 @@
+{
+  "metadata": {
+    "report_id": "test-001",
+    "metadata_timestamp": "2025-12-07T18:29:58.878516022Z",
+    "report_creation_timestamp": "2025-12-07T10:00:00Z",
+    "node_sequence_number": 1,
+    "prev_envelope_hash": "abc123",
+    "signer": {
+      "node_id": "nodeA",
+      "alg": "Ed25519"
+    }
+  },
+  "key_encrypted": {
+    "encryption_algorithm": "RSA-OAEP-SHA256",
+    "key_per_node": [
+      {
+        "node": "nodeB",
+        "encrypted_key": "YL8H2PHSy6tHDT9UlTo2xUBSRDJ0r5v5JjBlsqVadB71yhmK6uyEqvmvTbu8Atzu7d1LdukzyWz__q91qVcD670d8rfVZm5oIy6h2jxSwuH5Ku2FZVNmhS9aKVjrPUQBvk_PYzD0XleWO_uHO4-M_h9QsSWxgFnzt0c9anrv9e0g_0XSXcSMyUEB7FclMZWcaXC_NsJevHWUpqg43U8BznNjDO9XoxW7M46tSol6rH9XHgm_xNjdQJk5l3WO48N1-2piJNRW9KvYhJp4klZBLkiY-yxioJN1RmYHCVuPC1UpvMLtKpaTkJTWbGWzDythBLxPRv6i3Hi3DbT2F-TXRQ"
+      }
+    ]
+  },
+  "report_encrypted": {
+    "encryption_algorithm": "AES-256-GCM",
+    "nonce": "5GaBiv-KW6kb151q",
+    "ciphertext": "rXi1EV_jPGBvlsrQPd7r4dmonzIUljFhCZcN8YpX9UDlaz1ZB0C0ypUVhPfqzUQ4y-ZvmFxdrHBD_AnlVM_F28_QkYUP8xMnHoX3NOVnX8zZKG_qaaJRYBovFtMzvXWxe8YjmVmwhChCIZOVGCyjUwmEUBI_HpE-OpD7ED7f3a_8tEnCeGzmEzwR4F06P6igdX7ZJTR3xfVME3giAeGnvXUsedYNRdyKO24wbjOrBX5pP71NAMHWRJIAdYVcGTTsU8EJGAQmNAXXdXZajN9BODjBR7uvto8OhgGiwtalHNWKJtsbuSNM8piI6I-H2BmWLDYtjOlV2K2a9e0RIUfWP4yNGkWMPsTRQCfJrx0bdqgkpqu8eMSxBnHK83cRanAMbfTgkoMteZ-cE1V8pUWDCvxRefsUd9km7DIvG3BCHAbAVFHC3nHNyYkNpytTSkQbyxEb5gaWRnnVe7wWnJOjTLtEivJ2xjI",
+    "tag": "Ftw7EfGtnIWQ1kovv3wmsQ"
+  }
+}
