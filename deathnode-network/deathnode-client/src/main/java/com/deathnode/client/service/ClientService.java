@@ -115,7 +115,7 @@ public class ClientService {
         log.info("Created envelope: {} (seq={})", written.getFileName(), nextSeq);
 
         // 7. Save to DB
-        db.insertReport(envelopeHash, written.toString(), Config.getNodeSelfId(), nextSeq, prevHash);
+        db.insertReport(envelopeHash, written.toString(), Config.getNodeSelfId(), nextSeq, null, metadata.getMetadataTimestamp(), prevHash);
         db.upsertNodeState(Config.getNodeSelfId(), nextSeq, envelopeHash);
 
         // 8. Add to pending buffer
@@ -163,15 +163,16 @@ public class ClientService {
         // Load RSA private key for decryption
         PrivateKey rsaPriv = KeyUtils.loadPrivateKeyFromKeystore(Config.RSA_PRIVATE_KEY_ALIAS);
 
-        System.out.printf("%-66s %-15s %-6s %-26s %-66s%n",
-                "envelope_hash", "signer", "seq", "meta_timestamp", "prev_hash");
+        System.out.printf("%-66s %-13s %-13s %-13s %-32s %-66s%n",
+                "envelope_hash", "signer", "local_seq", "global_seq", "meta_timestamp", "prev_hash");
         System.out.println("-".repeat(200));
 
         for (DatabaseService.ReportRow row : rows) {
-            System.out.printf("%-66s %-15s %-6d %-26s %-66s%n",
+            System.out.printf("%-66s %-13s %-13d %-13s %-32s %-66s%n",
                     row.envelopeHash,
                     row.signerNodeId,
                     row.nodeSequenceNumber,
+                    row.globalSequenceNumber == 0 ? "unsynced" : row.globalSequenceNumber,
                     row.metadataTimestamp,
                     row.prevEnvelopeHash == null ? "" : row.prevEnvelopeHash);
 

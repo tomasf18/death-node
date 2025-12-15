@@ -4,6 +4,7 @@ import com.deathnode.client.config.Config;
 import com.deathnode.client.service.DatabaseService;
 import com.deathnode.common.grpc.*;
 import com.deathnode.common.model.Envelope;
+import com.deathnode.common.model.Metadata;
 import com.deathnode.common.util.HashUtils;
 import com.google.gson.*;
 import com.google.protobuf.ByteString;
@@ -257,13 +258,20 @@ public class PersistentSyncClient {
                 JsonObject jsonObj = JsonParser.parseString(json).getAsJsonObject();
                 Envelope envelope = Envelope.fromJson(jsonObj);
 
-                String signer = envelope.getMetadata().getSignerNodeId();
-                long nodeSeq = envelope.getMetadata().getNodeSequenceNumber();
-                String prevHash = envelope.getMetadata().getPrevEnvelopeHash();
-
+                Metadata metadata = envelope.getMetadata();
+                String signer = metadata.getSignerNodeId();
+                long nodeSeq = metadata.getNodeSequenceNumber();
+                String prevHash = metadata.getPrevEnvelopeHash();
+                String metadataTimestamp = metadata.getMetadataTimestamp();
                 
                 try {
-                    db.insertReport(hash, filePath.toString(), signer, nodeSeq, prevHash);
+                    if (isNew) {
+                        db.insertReport(hash, filePath.toString(), signer, nodeSeq, db.getGlobalSeqFromLastSyncedReport() + 1, metadataTimestamp, prevHash);
+                    } else {
+                        db.updateReport(hash, db.getGlobalSeqFromLastSyncedReport() + 1);
+                        isNew = false;
+                        System.out.println("Envelope already exists: " + filename);
+                    }
                 } catch (java.sql.SQLException e) {
                     // Unique constraint - already exists
                 }
