@@ -7,10 +7,6 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Column;
 
-import io.hypersistence.utils.hibernate.type.json.JsonType;
-import org.hibernate.annotations.Type;
-import java.util.Map;
-
 @Entity
 @Table(name = "signed_block_merkle_roots")
 public class SignedBlockMerkleRoot {
@@ -25,19 +21,28 @@ public class SignedBlockMerkleRoot {
     @Column(name = "block_root", nullable = false, unique = true, length = 64)
     private String blockRoot;
 
-    @Type(JsonType.class)
-    @Column(name = "per_node_roots_json", columnDefinition = "jsonb", nullable = false)
-    private Map<String, String> perNodeRoots;
-
     @Column(name = "prev_block_root", length = 64)
     private String prevBlockRoot;
-
-    @Column(name = "server_signature", nullable = false, length = 64)
-    private String serverSignature;
 
     public SignedBlockMerkleRoot() {
         // Default constructor
     }
 
-    // Getters & setters omitted for brevity
+    public SignedBlockMerkleRoot(long blockNumber, String blockRoot, String prevBlockRoot) {
+        this.blockNumber = blockNumber;
+        this.blockRoot = blockRoot;
+        this.prevBlockRoot = prevBlockRoot;
+    }
+
+    public long getBlockId() {
+        return blockId;
+    }
+
+    public long getBlockNumber() {
+        return blockNumber;
+    }
+
+    public String getBlockRoot() {
+        return blockRoot;
+    }
 }

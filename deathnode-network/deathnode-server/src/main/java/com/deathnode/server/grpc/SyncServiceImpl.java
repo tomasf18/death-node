@@ -2,9 +2,11 @@ package com.deathnode.server.grpc;
 
 import com.deathnode.common.grpc.Error;
 import com.deathnode.common.grpc.SyncServiceGrpc;
+import com.deathnode.common.util.HashUtils;
 import com.deathnode.common.grpc.ClientMessage;
 import com.deathnode.common.grpc.ServerMessage;
 import com.deathnode.common.grpc.Hello;
+import com.deathnode.common.grpc.SignedBufferRoot;
 import com.deathnode.common.grpc.BufferUpload;
 import com.deathnode.common.grpc.SyncResult;
 import com.deathnode.server.service.SyncCoordinator;
@@ -12,6 +14,7 @@ import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import com.google.protobuf.ByteString;
 
@@ -63,10 +66,10 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                 } else if (clientMessage.hasBufferUpload()) {
                     handleBufferUpload(clientMessage.getBufferUpload());
                 } else {
-                    System.out.println("Received unknown client message type from " + nodeId);
+                    System.out.println("Received unknown client message type from " + this.nodeId);
                 }
             } catch (Exception e) {
-                System.out.println("Error handling client message from " + nodeId + ": " + e.getMessage());
+                System.out.println("Error handling client message from " + this.nodeId + ": " + e.getMessage());
                 sendError("INTERNAL_ERROR", "Failed to process message: " + e.getMessage());
             }
         }
@@ -75,36 +78,39 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
             this.nodeId = hello.getNodeId();
             
             if (hello.getStartSync()) {
-                String roundId = coordinator.startRoundIfAbsent(nodeId);
-                System.out.println("Client " + nodeId + " initiated sync round " + roundId);
+                String roundId = coordinator.startRoundIfAbsent(this.nodeId);
+                System.out.println("Client " + this.nodeId + " initiated sync round " + roundId);
             } else {
-                SyncCoordinator.ClientConnection conn = new SyncCoordinator.ClientConnection(nodeId, responseObserver);
-                coordinator.registerClient(nodeId, conn);
+                SyncCoordinator.ClientConnection conn = new SyncCoordinator.ClientConnection(this.nodeId, responseObserver);
+                coordinator.registerClient(this.nodeId, conn);
                 registered = true;
-                System.out.println("Client " + nodeId + " connected");
+                System.out.println("Client " + this.nodeId + " connected");
             }
         }
 
         private void handleBufferUpload(BufferUpload upload) {
-            String uploadNodeId = upload.getNodeId();
+            String bufferNodeId = upload.getNodeId();   
             
-            if (!uploadNodeId.equals(nodeId)) {
-                System.out.println("Node ID mismatch: stream=" + nodeId + ", upload=" + uploadNodeId);
-                sendError("NODE_ID_MISMATCH", "Node ID in upload doesn't match connection");
-                return;
-            }
-
-            System.out.println("Received buffer upload from " + nodeId + " with " + upload.getEnvelopesCount() + " envelopes");
-
             // Convert protobuf repeated bytes to List<byte[]>
             List<byte[]> envelopes = upload.getEnvelopesList().stream()
-                    .map(ByteString::toByteArray)
-                    .toList();
+            .map(ByteString::toByteArray)
+            .toList();
+            
+            byte[] bufferRoot = upload.getBufferRoot().toByteArray();
+            byte[] signedBufferRoot = upload.getSignedBufferRoot().toByteArray();
+
+            SyncCoordinator.VerificationsResult verificationsResult = coordinator.performAllVerifications(bufferNodeId, this.nodeId, envelopes, bufferRoot, signedBufferRoot);
+            
+            if (!verificationsResult.isSuccess()) {
+                sendError(verificationsResult.getErrorCode(), verificationsResult.getErrorMessage());
+                return; 
+            }
+            
+            System.out.println("Received buffer upload from " + bufferNodeId + " with " + upload.getEnvelopesCount() + " envelopes");
 
             try {
                 // Submit buffer to coordinator and get future
-                CompletableFuture<SyncCoordinator.SyncResult> future = coordinator.submitBuffer(nodeId, envelopes);
-
+                CompletableFuture<SyncCoordinator.SyncResult> future = coordinator.submitBufferAndRoot(bufferNodeId, envelopes, bufferRoot, signedBufferRoot);
                 // When complete, send result to this client
                 future.whenComplete((result, error) -> {
                     if (error != null) {
@@ -113,34 +119,41 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                         responseObserver.onCompleted();
                     } else {
                         sendSyncResult(result);
-                        // responseObserver.onCompleted();
                     }
                 });
 
             } catch (Exception e) {
-                System.err.println("Failed to submit buffer for " + nodeId + ": " + e.getMessage());
+                System.err.println("Failed to submit buffer for " + bufferNodeId + ": " + e.getMessage());
                 sendError("SUBMIT_FAILED", e.getMessage());
                 responseObserver.onCompleted();
             }
         }
 
         private void sendSyncResult(SyncCoordinator.SyncResult result) {
-            System.out.println("Sending SyncResult to " + nodeId + " for round " + result.roundId + " (" + result.orderedEnvelopes.size() + " envelopes)");
+            System.out.println("Sending SyncResult to " + this.nodeId + " for round " + result.getRoundId() + " (" + result.getOrderedEnvelopes().size() + " envelopes)");
 
             SyncResult.Builder builder = SyncResult.newBuilder()
-                    .setRoundId(result.roundId);
+                    .setRoundId(result.getRoundId());
 
             // Add all ordered envelopes
-            for (byte[] env : result.orderedEnvelopes) {
+            for (byte[] env : result.getOrderedEnvelopes()) {
                 builder.addOrderedEnvelopes(ByteString.copyFrom(env));
             }
 
-            // Add corresponding hashes
-            for (String hash : result.envelopeHashes) {
-                builder.addEnvelopeHashes(hash);
+            builder.setBlockNumber(result.getBlockNumber());
+            builder.setBlockRoot(ByteString.copyFrom(result.getBlockRoot()));
+            builder.setSignedBlockRoot(ByteString.copyFrom(result.getSignedBlockRoot()));
+
+            for (SyncRound.PerNodeSignedBufferRoots nodeSignedBufferRoot : result.getPerNodeSignedBufferRoots()) {
+                SignedBufferRoot bufferRootMsg = SignedBufferRoot.newBuilder()
+                        .setNodeId(nodeSignedBufferRoot.getNodeId())
+                        .setBufferRoot(ByteString.copyFrom(HashUtils.hexToBytes(nodeSignedBufferRoot.getBufferRoot())))
+                        .setSignedBufferRoot(ByteString.copyFrom(HashUtils.hexToBytes(nodeSignedBufferRoot.getSignedBufferRoot())))
+                        .build();
+                builder.addPerNodeSignedBufferRoots(bufferRootMsg);
             }
 
-            // TODO: Add signed_block_root and per_node_roots when implementing security
+            builder.setPrevBlockRoot(ByteString.copyFrom(result.getPrevBlockRoot()));
 
             ServerMessage msg = ServerMessage.newBuilder()
                     .setSyncResult(builder.build())
@@ -165,17 +178,17 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         @Override
         public void onError(Throwable t) {
-            System.err.println("Stream error for client " + nodeId + ": " + t.getMessage());
+            System.err.println("Stream error for client " + this.nodeId + ": " + t.getMessage());
             if (registered) {
-                coordinator.unregisterClient(nodeId);
+                coordinator.unregisterClient(this.nodeId);
             }
         }
 
         @Override
         public void onCompleted() {
-            System.out.println("Client " + nodeId + " closed connection");
+            System.out.println("Client " + this.nodeId + " closed connection");
             if (registered) {
-                coordinator.unregisterClient(nodeId);
+                coordinator.unregisterClient(this.nodeId);
             }
             responseObserver.onCompleted();
         }

@@ -59,17 +59,25 @@ public class Envelope {
         e.setReportEnc(ReportEncrypted.fromJson(o.getAsJsonObject("report_encrypted")));
         return e;
     }
+    
+    public static Envelope fromBytes(byte[] data) {
+        JsonObject o = JsonParser.parseString(new String(data)).getAsJsonObject();
+        return fromJson(o);
+    }
 
     public static Envelope read(Path file) throws Exception {
         byte[] data = Files.readAllBytes(file);
-        JsonObject o = JsonParser.parseString(new String(data)).getAsJsonObject();
-        return fromJson(o);
+        return fromBytes(data);
     }
 
     // ---------- File + Hash ----------
 
     public String computeHashHex() {
         return HashUtils.sha256Hex(toBytes());
+    }
+
+    public byte[] computeHashBytes() {
+        return HashUtils.sha256(toBytes());
     }
 
     public Path writeSelf(Path dir) throws Exception {

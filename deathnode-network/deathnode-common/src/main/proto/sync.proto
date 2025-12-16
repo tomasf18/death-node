@@ -26,13 +26,12 @@ message BufferUpload {
   
   // Each envelope is the complete JSON bytes of the envelope
   repeated bytes envelopes = 2;
+
+  // Buffer Merkle root (computed over the envelopes)
+  bytes buffer_root = 3;
   
-  // Placeholder for future: signed Merkle root of the buffer
-  bytes signed_buffer_root = 3;
-  
-  // Last known state (for chain verification placeholder)
-  int64 last_node_sequence = 4;
-  string last_envelope_hash = 5;  // hex string
+  // Signed Merkle root of the buffer envelopes
+  bytes signed_buffer_root = 4;
 }
 
 /**
@@ -66,17 +65,18 @@ message SyncResult {
   // All envelopes from all nodes, globally ordered
   repeated bytes ordered_envelopes = 2;
   
-  // Corresponding hashes (same order)
-  repeated string envelope_hashes = 3;
+  int64 block_number = 3;
   
   // Placeholder for future: server-signed block commitment
-  bytes signed_block_root = 4;
+  bytes block_root = 4;
+  
+  bytes signed_block_root = 5;
   
   // Placeholder for future: per-node signed buffer roots
-  repeated SignedBufferRoot per_node_roots = 5;
+  repeated SignedBufferRoot per_node_signed_buffer_roots = 6;
   
   // Reference to previous block (for chaining)
-  string prev_block_root = 6;
+  bytes prev_block_root = 7;
 }
 
 /**
@@ -84,8 +84,8 @@ message SyncResult {
  */
 message SignedBufferRoot {
   string node_id = 1;
-  bytes merkle_root = 2;
-  bytes signature = 3;
+  bytes buffer_root = 2;
+  bytes signed_buffer_root = 3;
 }
 
 /**

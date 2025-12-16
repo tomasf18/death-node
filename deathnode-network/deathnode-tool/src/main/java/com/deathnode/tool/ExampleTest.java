@@ -5,9 +5,9 @@ import java.time.Instant;
 import java.util.*;
 
 import com.deathnode.common.model.Report;
+import com.deathnode.tool.util.KeyLoader;
 import com.deathnode.common.model.Envelope;
 import com.deathnode.common.model.Metadata;
-import com.deathnode.tool.utils.KeyLoader;
 
 /**
  * ExampleTest - Demonstrates programmatic usage of the SecureDocumentProtocol library.

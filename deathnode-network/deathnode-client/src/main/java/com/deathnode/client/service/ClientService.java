@@ -2,7 +2,7 @@ package com.deathnode.client.service;
 
 import com.deathnode.client.config.Config;
 import com.deathnode.client.grpc.PersistentSyncClient;
-import com.deathnode.client.utils.KeyUtils;
+import com.deathnode.tool.util.KeyLoader;
 import com.deathnode.common.model.*;
 import com.deathnode.tool.SecureDocumentProtocol;
 import com.google.gson.*;
@@ -116,7 +116,7 @@ public class ClientService {
         metadata.setSignerAlg("Ed25519");
 
         // 3. Load signing key (Ed25519)
-        PrivateKey signerPriv = KeyUtils.loadPrivateKeyFromKeystore(Config.ED_PRIVATE_KEY_ALIAS);
+        PrivateKey signerPriv = KeyLoader.loadPrivateKeyFromKeystore(Config.ED_PRIVATE_KEY_ALIAS, Config.getKeystorePath(), Config.KEYSTORE_PASSWORD);
         if (signerPriv == null) {
             throw new IllegalStateException("Signer private key not found");
         }
@@ -185,7 +185,7 @@ public class ClientService {
         }
 
         // Load RSA private key for decryption
-        PrivateKey rsaPriv = KeyUtils.loadPrivateKeyFromKeystore(Config.RSA_PRIVATE_KEY_ALIAS);
+        PrivateKey rsaPriv = KeyLoader.loadPrivateKeyFromKeystore(Config.RSA_PRIVATE_KEY_ALIAS, Config.getKeystorePath(), Config.KEYSTORE_PASSWORD);
 
         System.out.printf("%-66s %-13s %-13s %-13s %-32s %-66s%n",
                 "envelope_hash", "signer", "local_seq", "global_seq", "meta_timestamp", "prev_hash");
@@ -239,7 +239,7 @@ public class ClientService {
                     continue;
                 }
 
-                PublicKey senderPub = KeyUtils.publicKeyFromBase64(senderKeyB64, "Ed25519");
+                PublicKey senderPub = KeyLoader.pemStringToPublicKey(senderKeyB64, "Ed25519");
 
                 // Decrypt and verify
                 Report decrypted = SecureDocumentProtocol.unprotect(envelope, rsaPriv, Config.getNodeSelfId(), senderPub);
@@ -270,7 +270,7 @@ public class ClientService {
             }
 
             try {
-                PublicKey pk = KeyUtils.publicKeyFromBase64(keyB64, "RSA");
+                PublicKey pk = KeyLoader.pemStringToPublicKey(keyB64, "RSA");
                 recipients.put(nodeId, pk);
             } catch (Exception e) {
                 System.err.println("Failed to parse enc_pub_key for node " + nodeId + ": " + e.getMessage());

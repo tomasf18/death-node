@@ -2,16 +2,21 @@ package com.deathnode.client.grpc;
 
 import com.deathnode.client.config.Config;
 import com.deathnode.client.service.DatabaseService;
+import com.deathnode.tool.util.KeyLoader;
 import com.deathnode.common.grpc.*;
 import com.deathnode.common.model.Envelope;
 import com.deathnode.common.model.Metadata;
 import com.deathnode.common.util.HashUtils;
+import com.deathnode.common.util.MerkleUtils;
+import com.deathnode.tool.SecureDocumentProtocol;
 import com.google.gson.*;
 import com.google.protobuf.ByteString;
 import io.grpc.stub.StreamObserver;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.security.Key;
+import java.security.PrivateKey;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -162,28 +167,27 @@ public class PersistentSyncClient {
                 BufferUpload.Builder builder = BufferUpload.newBuilder()
                         .setNodeId(Config.getNodeSelfId());
 
+                List<byte[]> envelopesToSend = new ArrayList<>();
+
                 // Add all pending envelopes
-                for (String pathStr : pendingEnvelopes) {
+                for (String pathStr : pendingEnvelopes) { // first-in, first-out, so buffer order is preserved when sending
                     try {
                         Path path = Paths.get(pathStr);
                         byte[] envelopeBytes = Files.readAllBytes(path);
                         builder.addEnvelopes(ByteString.copyFrom(envelopeBytes));
+                        envelopesToSend.add(envelopeBytes);
                     } catch (Exception e) {
                         System.err.println("Failed to read envelope " + pathStr + ": " + e.getMessage());
                     }
                 }
+                
+                PrivateKey signPrivateKey = KeyLoader.loadPrivateKeyFromKeystore(Config.ED_PRIVATE_KEY_ALIAS, Config.getKeystorePath(), Config.KEYSTORE_PASSWORD);
+                // Compute and sign Merkle root
+                byte[] merkleRoot = MerkleUtils.computeMerkleRoot(envelopesToSend);
+                byte[] signedMerkleRoot = SecureDocumentProtocol.signData(merkleRoot, signPrivateKey);
 
-                // Add last known state
-                try {
-                    long lastSeq = db.getLastSequenceNumber(Config.getNodeSelfId());
-                    String lastHash = db.getLastEnvelopeHash(Config.getNodeSelfId());
-                    builder.setLastNodeSequence(lastSeq);
-                    if (lastHash != null) {
-                        builder.setLastEnvelopeHash(lastHash);
-                    }
-                } catch (Exception e) {
-                    System.out.println("Could not get last state: " + e.getMessage());
-                }
+                builder.setBufferRoot(ByteString.copyFrom(merkleRoot));
+                builder.setSignedBufferRoot(ByteString.copyFrom(signedMerkleRoot));
 
                 // Send buffer
                 ClientMessage msg = ClientMessage.newBuilder()

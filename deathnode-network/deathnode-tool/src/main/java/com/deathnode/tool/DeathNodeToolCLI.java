@@ -8,7 +8,7 @@ import java.util.*;
 import com.deathnode.common.model.Envelope;
 import com.deathnode.common.model.Metadata;
 import com.deathnode.common.model.Report;
-import com.deathnode.tool.utils.KeyLoader;
+import com.deathnode.tool.util.KeyLoader;
 
 /**
  * DeathNodeToolCLI - Command-line interface for the DeathNode secure document library.

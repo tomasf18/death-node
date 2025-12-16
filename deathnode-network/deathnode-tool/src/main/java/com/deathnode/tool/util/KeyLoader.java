@@ -1,12 +1,16 @@
-package com.deathnode.tool.utils;
+package com.deathnode.tool.util;
 
 import com.google.gson.*;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.*;
 import java.security.spec.*;
+import java.util.Base64;
 
 /**
  * KeyLoader - Utility class for reading/writing keys and JSON files.
@@ -91,7 +95,6 @@ public class KeyLoader {
 
     /**
      * Read Ed25519 public key (X.509 format, DER-encoded).
-     * Requires Java 15+ or BouncyCastle provider.
      */
     public static PublicKey readEd25519PublicKey(String publicKeyPath) throws Exception {
         System.out.println("Reading Ed25519 public key from: " + publicKeyPath);
@@ -103,7 +106,6 @@ public class KeyLoader {
 
     /**
      * Read Ed25519 private key (PKCS#8 format, DER-encoded).
-     * Requires Java 15+ or BouncyCastle provider.
      */
     public static PrivateKey readEd25519PrivateKey(String privateKeyPath) throws Exception {
         System.out.println("Reading Ed25519 private key from: " + privateKeyPath);
@@ -111,6 +113,45 @@ public class KeyLoader {
         PKCS8EncodedKeySpec privSpec = new PKCS8EncodedKeySpec(privEncoded);
         KeyFactory keyFac = KeyFactory.getInstance("Ed25519");
         return keyFac.generatePrivate(privSpec);
+    }
+
+    public static PrivateKey loadPrivateKeyFromKeystore(String alias, String path, String password) throws Exception {
+        Path p = Paths.get(path);
+        if (!Files.exists(p)) {
+            throw new IllegalStateException("Keystore not found at: " + path);
+        }
+
+        String ksType = "JKS";
+        KeyStore ks = KeyStore.getInstance(ksType);
+        try (InputStream is = Files.newInputStream(p)) {
+            ks.load(is, password.toCharArray());
+        }
+
+        Key key = ks.getKey(alias, password.toCharArray());
+        if (key instanceof PrivateKey) {
+            return (PrivateKey) key;
+        } else {
+            return null;
+        }
+    }
+
+    /* 
+    * Helper: convert a base64-encoded DER public key to PublicKey
+    * algorithm can be "RSA" or "Ed25519" depending on key type
+    */
+    public static PublicKey pemStringToPublicKey(String keyText, String algorithm) throws Exception {
+        String cleaned = keyText.trim();
+
+        if (cleaned.contains("BEGIN")) {
+            cleaned = cleaned
+                .replaceAll("-----BEGIN ([A-Z ]+)-----", "")
+                .replaceAll("-----END ([A-Z ]+)-----", "")
+                .replaceAll("\\s+", "");
+        }
+
+        byte[] der = Base64.getDecoder().decode(cleaned);
+        X509EncodedKeySpec spec = new X509EncodedKeySpec(der);
+        return KeyFactory.getInstance(algorithm).generatePublic(spec);
     }
 
     /**

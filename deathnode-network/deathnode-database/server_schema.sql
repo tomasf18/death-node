@@ -30,12 +30,10 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 
 CREATE TABLE IF NOT EXISTS signed_block_merkle_roots (
-    block_id                BIGSERIAL                   PRIMARY KEY, -- auto-incremented
-    block_number            BIGINT                      NOT NULL        UNIQUE,
-    block_root              VARCHAR(64)                 NOT NULL        UNIQUE,
-    per_node_roots_json     JSONB                       NOT NULL,
-    prev_block_root         VARCHAR(64),
-    server_signature        VARCHAR(64)                 NOT NULL
+    block_id                    BIGSERIAL                   PRIMARY KEY, -- auto-incremented
+    block_number                BIGINT                      NOT NULL        UNIQUE,
+    block_root                  VARCHAR(64)                 NOT NULL        UNIQUE,
+    prev_block_root             VARCHAR(64)
 );
 
 INSERT INTO nodes(node_id, pseudonym, enc_pub_key, sign_pub_key) 

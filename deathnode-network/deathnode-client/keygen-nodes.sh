@@ -36,7 +36,7 @@ echo ""
 for NODE_ID in "$@"; do
     echo ">>> Processing node: $NODE_ID"
     
-    NODE_KEYS_DIR="data/${NODE_ID}/keys"
+    NODE_KEYS_DIR="client-data/${NODE_ID}/keys"
     mkdir -p "$NODE_KEYS_DIR"
     
     TEMP_KEYS_DIR="/tmp/deathnode_${NODE_ID}_keys_$$"
@@ -144,7 +144,7 @@ for NODE_ID in "$@"; do
 done
 echo ""
 for NODE_ID in "$@"; do
-    echo "  data/${NODE_ID}/keys/"
+    echo "  client-data/${NODE_ID}/keys/"
     echo "    ├── keystore.jks"
     echo "    ├── ${NODE_ID}_ed25519_priv.der"
     echo "    ├── ${NODE_ID}_ed25519_pub.pem"

@@ -1,5 +1,6 @@
 package com.deathnode.server.grpc;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -13,11 +14,12 @@ import com.deathnode.server.service.SyncCoordinator;
  * Lightweight round state holder.
  */
 public class SyncRound {
-    public final String roundId;
-    public final Set<String> expectedNodes;
-    public final String initiator;
-    public final Map<String, List<byte[]>> buffers = new HashMap<>();
-    public final CompletableFuture<SyncCoordinator.SyncResult> completionFuture = new CompletableFuture<>();
+    private String roundId;
+    private Set<String> expectedNodes;
+    private String initiator;
+    private Map<String, List<byte[]>> buffers = new HashMap<>();
+    private List<PerNodeSignedBufferRoots> perNodeSignedBufferRoots = new ArrayList<>(); 
+    private CompletableFuture<SyncCoordinator.SyncResult> completionFuture = new CompletableFuture<>();
 
     public SyncRound(String roundId, Set<String> expectedNodes, String initiator) {
         this.roundId = roundId;
@@ -31,6 +33,14 @@ public class SyncRound {
 
     public synchronized void putBuffer(String nodeId, List<byte[]> envelopes) {
         buffers.put(nodeId, envelopes);
+    }
+
+    public synchronized void putNodeSignedBufferRoot(String nodeId, String bufferRoot, String signedBufferRoot) {
+        perNodeSignedBufferRoots.add(new PerNodeSignedBufferRoots(nodeId, bufferRoot, signedBufferRoot));
+    }
+
+    public synchronized List<PerNodeSignedBufferRoots> getPerNodeSignedBufferRoots() {
+        return new ArrayList<>(perNodeSignedBufferRoots);
     }
 
     public synchronized boolean isComplete() {
@@ -47,5 +57,29 @@ public class SyncRound {
 
     public void complete(SyncCoordinator.SyncResult result) {
         completionFuture.complete(result);
+    }
+
+    public class PerNodeSignedBufferRoots {
+        private String nodeId;
+        private String bufferRoot;
+        private String signedBufferRoot;
+
+        public PerNodeSignedBufferRoots(String nodeId, String bufferRoot, String signedBufferRoot) {
+            this.nodeId = nodeId;
+            this.bufferRoot = bufferRoot;
+            this.signedBufferRoot = signedBufferRoot;
+        }
+
+        public String getNodeId() {
+            return nodeId;
+        }
+
+        public String getBufferRoot() {
+            return bufferRoot;
+        }
+
+        public String getSignedBufferRoot() {
+            return signedBufferRoot;
+        }
     }
 }

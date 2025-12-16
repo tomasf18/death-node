@@ -66,11 +66,7 @@ public class SecureDocumentProtocol {
         
         // 2. Create signature over (report || metadata)
         byte[] signPayload = concat(reportBytes, metadataBytes);
-        Signature sig = Signature.getInstance(ED25519);
-        sig.initSign(signerPrivKey);
-        sig.update(signPayload);
-        byte[] signatureBytes = sig.sign();
-        String signatureB64 = HashUtils.bytesToBase64UrlEncoded(signatureBytes);
+        String signatureB64 = signDataHex(signPayload, signerPrivKey);
         
         // 3. Create inner payload (report + signature)
         InnerPayload innerPayload = new InnerPayload();
@@ -113,16 +109,16 @@ public class SecureDocumentProtocol {
             
             EncryptedKey ek = new EncryptedKey();
             ek.setNode(nodeId);
-            ek.setEncryptedKey(HashUtils.bytesToBase64UrlEncoded(wrappedCek));
+            ek.setEncryptedKey(HashUtils.bytesToHex(wrappedCek));
             cekEncrypted.getKeys().add(ek);
         }
         
         // 7. Build encrypted report section
         ReportEncrypted reportEnc = new ReportEncrypted();
         reportEnc.setEncryptionAlgorithm("AES-256-GCM");
-        reportEnc.setNonce(HashUtils.bytesToBase64UrlEncoded(nonce));
-        reportEnc.setCiphertext(HashUtils.bytesToBase64UrlEncoded(ciphertext));
-        reportEnc.setTag(HashUtils.bytesToBase64UrlEncoded(tag));
+        reportEnc.setNonce(HashUtils.bytesToHex(nonce));
+        reportEnc.setCiphertext(HashUtils.bytesToHex(ciphertext));
+        reportEnc.setTag(HashUtils.bytesToHex(tag));
         
         // 8. Assemble envelope
         Envelope envelope = new Envelope();
@@ -271,7 +267,7 @@ public class SecureDocumentProtocol {
         byte[] cekBytes = null;
         for (EncryptedKey ek : cekEncrypted.getKeys()) {
             if (ek.getNode().equals(recipientNodeId)) {
-                byte[] wrappedCek = base64UrlDecode(ek.getEncryptedKey());
+                byte[] wrappedCek = HashUtils.hexToBytes(ek.getEncryptedKey());
                 Cipher rsaOaep = Cipher.getInstance(RSA_OAEP_TRANSFORM);
                 rsaOaep.init(Cipher.DECRYPT_MODE, recipientPrivKey);
                 cekBytes = rsaOaep.doFinal(wrappedCek);
@@ -286,9 +282,9 @@ public class SecureDocumentProtocol {
         SecretKey cek = new SecretKeySpec(cekBytes, "AES");
         
         // 2. Decrypt payload with AES-GCM (AAD = metadata)
-        byte[] nonce = base64UrlDecode(reportEnc.getNonce());
-        byte[] ciphertext = base64UrlDecode(reportEnc.getCiphertext());
-        byte[] tag = base64UrlDecode(reportEnc.getTag());
+        byte[] nonce = HashUtils.hexToBytes(reportEnc.getNonce());
+        byte[] ciphertext = HashUtils.hexToBytes(reportEnc.getCiphertext());
+        byte[] tag = HashUtils.hexToBytes(reportEnc.getTag());
         byte[] metadataBytes = canonicalJson(metadata.toJson());
         
         Cipher aesGcm = Cipher.getInstance(AES_GCM);
@@ -311,7 +307,7 @@ public class SecureDocumentProtocol {
         InnerPayload innerPayload = InnerPayload.fromJson(payloadObj);
         
         Report report = innerPayload.getReport();
-        byte[] signatureBytes = base64UrlDecode(innerPayload.getSignature());
+        byte[] signatureBytes = HashUtils.hexToBytes(innerPayload.getSignature());
         
         // 4. Verify Ed25519 signature over (report || metadata)
         byte[] reportBytes = canonicalJson(report.toJson());
@@ -321,12 +317,31 @@ public class SecureDocumentProtocol {
         sig.initVerify(senderPubKey);
         sig.update(signPayload);
         
-        if (!sig.verify(signatureBytes)) {
+        if (!verifySignature(signPayload, signatureBytes, senderPubKey)) {
             throw new SecurityException("Ed25519 signature verification failed");
         }
         
         // 5. Return decrypted and verified report
         return report;
+    }
+
+    public static byte[] signData(byte[] data, PrivateKey privKey) throws Exception {
+        Signature sig = Signature.getInstance(ED25519);
+        sig.initSign(privKey);
+        sig.update(data);
+        return sig.sign();
+    }
+
+    public static String signDataHex(byte[] data, PrivateKey privKey) throws Exception {
+        byte[] signatureBytes = signData(data, privKey);
+        return HashUtils.bytesToHex(signatureBytes);
+    }
+
+    public static boolean verifySignature(byte[] data, byte[] signatureBytes, PublicKey pubKey) throws Exception {
+        Signature sig = Signature.getInstance(ED25519);
+        sig.initVerify(pubKey);
+        sig.update(data);
+        return sig.verify(signatureBytes);
     }
 
     // ========== Utility Methods ==========
@@ -356,12 +371,5 @@ public class SecureDocumentProtocol {
             offset += arr.length;
         }
         return result;
-    }
-
-    /**
-     * Base64url decode.
-     */
-    private static byte[] base64UrlDecode(String data) {
-        return Base64.getUrlDecoder().decode(data);
     }
 }

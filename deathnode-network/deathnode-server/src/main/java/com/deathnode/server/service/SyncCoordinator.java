@@ -1,25 +1,33 @@
 package com.deathnode.server.service;
 
+import com.deathnode.tool.SecureDocumentProtocol;
+import com.deathnode.tool.util.KeyLoader;
 import com.deathnode.common.grpc.RequestBuffer;
 import com.deathnode.common.grpc.SyncResult;
 import com.deathnode.common.grpc.ServerMessage;
 import com.deathnode.common.model.Envelope;
 import com.deathnode.common.model.Metadata;
 import com.deathnode.common.util.HashUtils;
+import com.deathnode.common.util.MerkleUtils;
 import com.deathnode.server.entity.Node;
 import com.deathnode.server.entity.NodeSyncState;
 import com.deathnode.server.entity.ReportEntity;
+import com.deathnode.server.entity.SignedBlockMerkleRoot;
 import com.deathnode.server.grpc.SyncRound;
 import com.deathnode.server.repository.NodeRepository;
 import com.deathnode.server.repository.NodeSyncStateRepository;
 import com.deathnode.server.repository.ReportRepository;
+import com.deathnode.server.repository.SignedBlockMerkleRootRepository;
 import com.google.gson.*;
 import io.grpc.stub.StreamObserver;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -32,25 +40,41 @@ import java.util.stream.Collectors;
  */
 @Service
 public class SyncCoordinator {
-    
+
     private final NodeRepository nodeRepository;
     private final ReportRepository reportRepository;
     private final NodeSyncStateRepository nodeSyncStateRepository;
+    private final SignedBlockMerkleRootRepository signedBlockMerkleRootRepository;
     private final FileStorageService fileStorageService;
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().create();
     private final Map<String, ClientConnection> allConnections = new HashMap<>();
-    
+
+    // configuration injected from application.yaml
+    @Value("${keystore_password}")
+    private String keystorePassword;
+
+    @Value("${ed_private_key_alias}")
+    private String edPrivateKeyAlias;
+
+    @Value("${rsa_private_key_alias}")
+    private String rsaPrivateKeyAlias;
+
+    @Value("${keystore_path}")
+    private String keystorePath;
+
     private SyncRound activeRound = null;
     private final Object roundLock = new Object();
 
     public SyncCoordinator(NodeRepository nodeRepository,
-                          ReportRepository reportRepository,
-                          FileStorageService fileStorageService,
-                          NodeSyncStateRepository nodeSyncStateRepository) {
+            ReportRepository reportRepository,
+            FileStorageService fileStorageService,
+            NodeSyncStateRepository nodeSyncStateRepository,
+            SignedBlockMerkleRootRepository signedBlockMerkleRootRepository) {
         this.nodeRepository = nodeRepository;
         this.reportRepository = reportRepository;
         this.fileStorageService = fileStorageService;
         this.nodeSyncStateRepository = nodeSyncStateRepository;
+        this.signedBlockMerkleRootRepository = signedBlockMerkleRootRepository;
     }
 
     /**
@@ -63,17 +87,19 @@ public class SyncCoordinator {
                 return activeRound.getRoundId();
             }
 
-            // Create new round with all known nodes as participants -> only the ones currently connected
+            // Create new round with all known nodes as participants -> only the ones
+            // currently connected
             Set<String> expectedNodes = allConnections.keySet().stream().collect(Collectors.toSet());
 
             String roundId = UUID.randomUUID().toString();
             activeRound = new SyncRound(roundId, expectedNodes, initiatorNodeId);
-            
-            System.out.println("Started new sync round: " + roundId + " (initiator: " + initiatorNodeId + ", expected nodes: " + expectedNodes + ")");
-            
+
+            System.out.println("Started new sync round: " + roundId + " (initiator: " + initiatorNodeId
+                    + ", expected nodes: " + expectedNodes + ")");
+
             // BROADCAST RequestBuffer to ALL currently registered connections
             broadcastRequestBuffer(roundId);
-            
+
             return roundId;
         }
     }
@@ -82,16 +108,15 @@ public class SyncCoordinator {
      * Broadcast RequestBuffer to all currently registered connections.
      */
     private void broadcastRequestBuffer(String roundId) {
-        if (activeRound == null) return;
+        if (activeRound == null)
+            return;
 
-        RequestBuffer request = 
-                RequestBuffer.newBuilder()
+        RequestBuffer request = RequestBuffer.newBuilder()
                 .setRoundId(roundId)
                 .setMessage("Sync round started - please send your buffer")
                 .build();
 
-        ServerMessage msg = 
-                ServerMessage.newBuilder()
+        ServerMessage msg = ServerMessage.newBuilder()
                 .setRequestBuffer(request)
                 .build();
 
@@ -128,29 +153,31 @@ public class SyncCoordinator {
      * Submit a node's buffer to the active round.
      * Returns a future that completes when the round is finalized.
      */
-    public CompletableFuture<SyncResult> submitBuffer(String nodeId, List<byte[]> envelopes) {
+    public CompletableFuture<SyncResult> submitBufferAndRoot(String nodeId, List<byte[]> envelopes, byte[] bufferRoot, byte[] signedBufferRoot) {
         synchronized (roundLock) {
             if (activeRound == null) {
                 return CompletableFuture.failedFuture(
                         new IllegalStateException("No active round"));
             }
 
-            System.out.println("Node " + nodeId + " submitted " + envelopes.size() + " envelopes to round " + activeRound.roundId);
+            System.out.println("Node " + nodeId + " submitted " + envelopes.size() + " envelopes to round "
+                    + activeRound.getRoundId());
 
             activeRound.putBuffer(nodeId, envelopes);
+            activeRound.putNodeSignedBufferRoot(nodeId, HashUtils.bytesToHex(bufferRoot), HashUtils.bytesToHex(signedBufferRoot));
 
             // Check if round is complete (all expected nodes submitted)
             if (activeRound.isComplete()) {
-                System.out.println("Round " + activeRound.roundId + " is complete - finalizing");
-                
+                System.out.println("Round " + activeRound.getRoundId() + " is complete - finalizing");
+
                 // Finalize asynchronously
                 SyncRound round = activeRound;
                 activeRound = null; // Clear active round
-                
+
                 return CompletableFuture.supplyAsync(() -> finalizeRound(round));
             } else {
                 // Return the round's completion future
-                return activeRound.completionFuture;
+                return activeRound.getCompletionFuture();
             }
         }
     }
@@ -162,17 +189,18 @@ public class SyncCoordinator {
      */
     @Transactional
     protected SyncResult finalizeRound(SyncRound round) {
-        System.out.println("Finalizing round: " + round.roundId);
+        System.out.println("Finalizing round: " + round.getRoundId());
 
         // 1. Collect all envelopes with metadata
         List<EnvelopeWithMeta> allEnvelopes = new ArrayList<>();
-        
-        for (Map.Entry<String, List<byte[]>> entry : round.getBuffers().entrySet()) {
+        Map<String, List<byte[]>> buffers = round.getBuffers();
+
+        for (Map.Entry<String, List<byte[]>> entry : buffers.entrySet()) {
             String nodeId = entry.getKey();
             Node signerNode = nodeRepository.findByNodeId(nodeId);
-            
+
             if (signerNode == null) {
-                System.out.println("Unknown node " + nodeId + " in round " + round.roundId + " - skipping");
+                System.out.println("Unknown node " + nodeId + " in round " + round.getRoundId() + " - skipping");
                 continue;
             }
 
@@ -182,34 +210,32 @@ public class SyncCoordinator {
                     String json = new String(envelopeBytes, StandardCharsets.UTF_8);
                     JsonObject jsonObj = JsonParser.parseString(json).getAsJsonObject();
                     Envelope envelope = Envelope.fromJson(jsonObj);
-                    
+
                     // Extract timestamp for ordering
                     Metadata metadata = envelope.getMetadata();
                     String tsStr = metadata.getMetadataTimestamp();
                     Instant timestamp = Instant.parse(tsStr);
-                    
+
                     String hash = HashUtils.sha256Hex(envelopeBytes);
-                    
+
                     allEnvelopes.add(new EnvelopeWithMeta(signerNode, envelopeBytes, hash, envelope, timestamp));
-                    
+
                 } catch (Exception e) {
                     System.out.println("Failed to parse envelope from " + nodeId + ": " + e.getMessage());
-                    // TODO: In future, reject entire round on parse failure
                 }
             }
         }
 
-        // 2. Sort by timestamp (tie-breakers: node_id, sequence)
+        // 2. Sort by timestamp (tie-breakers: node sequence number, node ID)
         allEnvelopes.sort(Comparator
                 .comparing((EnvelopeWithMeta e) -> e.timestamp)
-                .thenComparing(e -> e.signerNode.getNodeId())
-                .thenComparingLong(e -> e.envelope.getMetadata().getNodeSequenceNumber()));
+                .thenComparingLong(e -> e.envelope.getMetadata().getNodeSequenceNumber())
+                .thenComparing(e -> e.signerNode.getNodeId()));
 
-        System.out.println("Ordered " + allEnvelopes.size() + " envelopes for round " + round.roundId);
+        System.out.println("Ordered " + allEnvelopes.size() + " envelopes for round " + round.getRoundId());
 
         // 3. Persist each envelope to file and database
         List<byte[]> orderedBytes = new ArrayList<>();
-        List<String> orderedHashes = new ArrayList<>();
         long nextGlobalSeq = computeNextGlobalSequence();
 
         for (EnvelopeWithMeta meta : allEnvelopes) {
@@ -239,28 +265,131 @@ public class SyncCoordinator {
                 nodeSyncStateRepository.save(syncState);
 
                 orderedBytes.add(meta.envelopeBytes);
-                orderedHashes.add(meta.hash);
 
-                System.out.println("Persisted envelope: " + meta.hash + " (global_seq=" + entity.getGlobalSequenceNumber() + ")");
+                System.out.println(
+                        "Persisted envelope: " + meta.hash + " (global_seq=" + entity.getGlobalSequenceNumber() + ")");
 
             } catch (Exception e) {
                 System.out.println("Failed to persist envelope " + meta.hash + ": " + e.getMessage());
-                // TODO: In future, rollback entire round on persistence failure
             }
         }
 
         // 4. Build result
         SyncResult result = new SyncResult();
-        result.roundId = round.roundId;
-        result.orderedEnvelopes = orderedBytes;
-        result.envelopeHashes = orderedHashes;
+        result.setRoundId(round.getRoundId());
+        result.setOrderedEnvelopes(orderedBytes);
+        byte[] blockRoot = MerkleUtils.computeMerkleRoot(orderedBytes);
+        try {
+            PrivateKey serverSigningKey = KeyLoader.loadPrivateKeyFromKeystore(edPrivateKeyAlias, keystorePath, keystorePassword);
+            byte[] signedBlockRoot = SecureDocumentProtocol.signData(blockRoot, serverSigningKey);
+            result.setBlockRoot(blockRoot);
+            result.setSignedBlockRoot(signedBlockRoot);
+        } catch (Exception e) {
+            System.out.println("Failed to load server signing key: " + e.getMessage());
+            throw new RuntimeException("Server signing key load failure", e);
+        }
+
+        SignedBlockMerkleRoot lastSignedBlockMerkleRoot = signedBlockMerkleRootRepository.findByHighestBlockNumber().orElse(null);
+        long prevBlockNumber = 0;
+        byte[] prevBlockRoot = null;
+        if (lastSignedBlockMerkleRoot != null) {
+            prevBlockNumber = lastSignedBlockMerkleRoot.getBlockNumber();
+            prevBlockRoot = HashUtils.hexToBytes(lastSignedBlockMerkleRoot.getBlockRoot());
+        }
+
+        result.setBlockNumber(prevBlockNumber + 1);
+        result.setPrevBlockRoot(prevBlockRoot);
+        result.setPerNodeSignedBufferRoots(round.getPerNodeSignedBufferRoots());
+
+        SignedBlockMerkleRoot newSignedBlockMerkleRoot = new SignedBlockMerkleRoot(
+                prevBlockNumber + 1,
+                HashUtils.bytesToHex(blockRoot),
+                (prevBlockRoot != null) ? HashUtils.bytesToHex(prevBlockRoot) : null
+        );  
+        signedBlockMerkleRootRepository.save(newSignedBlockMerkleRoot);
 
         // 5. Complete the round's future
-        round.completionFuture.complete(result);
+        round.getCompletionFuture().complete(result);
 
-        System.out.println("Round " + round.roundId + " finalized with " + orderedBytes.size() + " envelopes");
-        
+        System.out.println("Round " + round.getRoundId() + " finalized with " + orderedBytes.size() + " envelopes");
+
         return result;
+    }
+
+    public boolean verifyEnvelopeChain(Node node, List<Envelope> envelopes) {
+        NodeSyncState syncState = nodeSyncStateRepository.findByNodeId(node.getNodeId());
+        String lastHash = (syncState != null) ? syncState.getLastEnvelopeHash() : null;
+        long expectedSeq = (syncState != null) ? syncState.getLastSequenceNumber() + 1 : 1L;
+
+        for (Envelope env : envelopes) {
+            Metadata meta = env.getMetadata();
+
+            // Check sequence envelope chain
+            if (meta.getNodeSequenceNumber() != expectedSeq) {
+                System.out.println(" -> Envelope chain check failed for node " + node.getNodeId() +
+                        ": expected seq " + expectedSeq + ", got " + meta.getNodeSequenceNumber());
+                return false;
+            }
+
+            // Check previous hash envelope chain
+            if (lastHash != null && !lastHash.equals(meta.getPrevEnvelopeHash())) {
+                System.out.println(" -> Envelope chain check failed for node " + node.getNodeId() +
+                        ": expected prev hash " + lastHash + ", got " + meta.getPrevEnvelopeHash());
+                return false;
+            }
+
+            // Update for next envelope
+            lastHash = env.computeHashHex();
+            expectedSeq++;
+        }
+
+        return true;
+    }
+
+    public VerificationsResult performAllVerifications(String bufferNodeId, String expectedNodeId, List<byte[]> envelopes, byte[] bufferRoot, byte[] signedBufferRoot) {
+        if (!bufferNodeId.equals(expectedNodeId)) {
+            System.out.println("Node ID mismatch: stream=" + expectedNodeId + ", upload=" + bufferNodeId);
+            return new VerificationsResult(false, "NODE_ID_MISMATCH", "Node ID in upload doesn't match connection");
+        }
+
+        Node node = nodeRepository.findByNodeId(bufferNodeId);
+
+        try {
+            PublicKey signPubKey = KeyLoader.pemStringToPublicKey(node.getSignPubKey(), "Ed25519");
+
+            if (!SecureDocumentProtocol.verifySignature(bufferRoot, signedBufferRoot, signPubKey)) {
+                System.out.println("Invalid buffer signature from node " + bufferNodeId);
+                return new VerificationsResult(false, "INVALID_SIGNATURE", "Buffer signature verification failed");
+            }
+
+            System.out.println(" -> Buffer signature verified for node " + bufferNodeId);
+
+            if (!MerkleUtils.verifyMerkleRoot(envelopes, bufferRoot)) {
+                System.out.println("Buffer Merkle root mismatch from node " + bufferNodeId);
+                return new VerificationsResult(false, "INVALID_MERKLE_ROOT", "Buffer Merkle root verification failed");
+            }
+
+            System.out.println(" -> Buffer Merkle root verified for node " + bufferNodeId);
+
+            List<Envelope> envelopesObjs = new ArrayList<>();
+            for (byte[] envBytes : envelopes) {
+                envelopesObjs.add(Envelope.fromBytes(envBytes));
+            }
+
+            if (!verifyEnvelopeChain(node, envelopesObjs)) {
+                System.out.println("Envelope chain verification failed for node " + bufferNodeId);
+                return new VerificationsResult(false, "INVALID_ENVELOPE_CHAIN", "Envelope chain verification failed");
+            }
+
+            System.out.println(" -> Envelope chain verified for node " + bufferNodeId);
+
+        } catch (Exception e) {
+            System.out.println("Error during verifications for node " + bufferNodeId + ": " + e.getMessage());
+            return new VerificationsResult(false, "VERIFICATION_ERROR", "Error during verifications: " + e.getMessage());
+        }
+
+        System.out.println(" -> All verifications passed for node " + bufferNodeId);
+        return new VerificationsResult(true, null, null);
     }
 
     private long computeNextGlobalSequence() {
@@ -273,15 +402,70 @@ public class SyncCoordinator {
     /**
      * Result of a completed sync round.
      */
-    public static class SyncResult {
-        public String roundId;
-        public List<byte[]> orderedEnvelopes;
-        public List<String> envelopeHashes;
-        
-        // Future fields for security:
-        // public byte[] signedBlockRoot;
-        // public Map<String, byte[]> perNodeSignedRoots;
-        // public String prevBlockRoot;
+    public static class SyncResult { // this message will be protected using gRPC with TLS
+        private String roundId;
+        private List<byte[]> orderedEnvelopes;
+        private long blockNumber;
+        private byte[] blockRoot;
+        private byte[] signedBlockRoot;
+        private List<SyncRound.PerNodeSignedBufferRoots> perNodeSignedBufferRoots = new ArrayList<>();
+        private byte[] prevBlockRoot;
+
+        public String getRoundId() {
+            return roundId;
+        }
+
+        public void setRoundId(String roundId) {
+            this.roundId = roundId;
+        }
+
+        public List<byte[]> getOrderedEnvelopes() {
+            return orderedEnvelopes;
+        }
+
+        public void setOrderedEnvelopes(List<byte[]> orderedEnvelopes) {
+            this.orderedEnvelopes = orderedEnvelopes;
+        }
+
+        public long getBlockNumber() {
+            return blockNumber;
+        }
+
+        public void setBlockNumber(long blockNumber) {
+            this.blockNumber = blockNumber;
+        }
+
+        public byte[] getBlockRoot() {
+            return blockRoot;
+        }
+
+        public void setBlockRoot(byte[] blockRoot) {
+            this.blockRoot = blockRoot;
+        }
+
+        public byte[] getSignedBlockRoot() {
+            return signedBlockRoot;
+        }
+
+        public void setSignedBlockRoot(byte[] signedBlockRoot) {
+            this.signedBlockRoot = signedBlockRoot;
+        }
+
+        public List<SyncRound.PerNodeSignedBufferRoots> getPerNodeSignedBufferRoots() {
+            return perNodeSignedBufferRoots;
+        }
+
+        public void setPerNodeSignedBufferRoots(List<SyncRound.PerNodeSignedBufferRoots> perNodeSignedBufferRoots) {
+            this.perNodeSignedBufferRoots = perNodeSignedBufferRoots;
+        }
+
+        public byte[] getPrevBlockRoot() {
+            return prevBlockRoot;
+        }
+
+        public void setPrevBlockRoot(byte[] prevBlockRoot) {
+            this.prevBlockRoot = prevBlockRoot;
+        }
     }
 
     /**
@@ -307,13 +491,29 @@ public class SyncCoordinator {
         final Envelope envelope;
         final Instant timestamp;
 
-        EnvelopeWithMeta(Node signerNode, byte[] envelopeBytes, String hash, 
-                        Envelope envelope, Instant timestamp) {
+        EnvelopeWithMeta(Node signerNode, byte[] envelopeBytes, String hash,
+                Envelope envelope, Instant timestamp) {
             this.signerNode = signerNode;
             this.envelopeBytes = envelopeBytes;
             this.hash = hash;
             this.envelope = envelope;
             this.timestamp = timestamp;
         }
+    }
+
+    public static class VerificationsResult {
+        private boolean success;
+        private String errorCode;
+        private String errorMessage;
+
+        public VerificationsResult(boolean success, String errorCode, String errorMessage) {
+            this.success = success;
+            this.errorCode = errorCode;
+            this.errorMessage = errorMessage;
+        }
+
+        public boolean isSuccess() { return success; }
+        public String getErrorCode() { return errorCode; }
+        public String getErrorMessage() { return errorMessage; }
     }
 }

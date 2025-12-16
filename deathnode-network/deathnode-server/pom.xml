@@ -23,6 +23,10 @@
             <groupId>com.deathnode</groupId>
             <artifactId>deathnode-common</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.deathnode</groupId>
+            <artifactId>deathnode-tool</artifactId>
+        </dependency>
 
         <!-- Spring Boot -->
 		<dependency>

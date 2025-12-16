@@ -26,3 +26,7 @@ spring:
 storage:
   envelopes-path: server-data/
 
+keystore_path: server-data/keys/keystore.jks
+keystore_password: demonstration
+ed_private_key_alias: sign-key
+rsa_private_key_alias: rsa-key
