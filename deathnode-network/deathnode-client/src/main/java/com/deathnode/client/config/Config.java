@@ -5,7 +5,7 @@ public class Config {
     private static String NODE_PSEUDONYM = null;     // generated randomly if not set
     
     // Server configuration
-    public static final String SERVER_HOST = "127.0.0.1"; // adapt for VMs later
+    public static final String SERVER_HOST = "192.168.0.10"; // adapt for VMs later
     public static final int SERVER_PORT = 9090;
     
     // Sync configuration

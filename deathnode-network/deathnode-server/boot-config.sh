@@ -28,23 +28,34 @@ iface $IFACE inet static
     gateway $GATEWAY
 EOF
 
+sudo ip route add default via $GATEWAY
+
 # Restart the network to apply the configurations
 sudo systemctl restart NetworkManager
 
 ###########
 # Firewall
 ###########
-# Check if UFW is installed, install if missing
-if ! command -v ufw &> /dev/null; then
-    sudo apt update
-    sudo apt install ufw -y
-fi
 
-# Enable UFW
-sudo ufw reset
-sudo ufw --force enable
+# Clean old firewall rules
+sudo iptables -F
+sudo iptables -X
 
-# Rules
-sudo ufw allow from $GATEWAY to any port $PORT proto tcp
-sudo ufw allow out to $DB_IP port $DB_PORT proto tcp
-sudo ufw reload
+# Default
+sudo iptables -P INPUT DROP
+sudo iptables -P OUTPUT ACCEPT
+sudo iptables -P FORWARD DROP
+
+# Loopback
+sudo iptables -A INPUT -i lo -j ACCEPT
+
+# Allow port 9090 only to the monitor
+sudo iptables -A INPUT -p tcp -s $GATEWAY --dport $PORT -j ACCEPT
+
+# Allow DB communications
+sudo iptables -A OUTPUT -p tcp -d $DB_IP --dport $DB_PORT -j ACCEPT
+sudo iptables -A INPUT -p tcp -s $DB_IP --sport $DB_PORT -j ACCEPT
+
+# Save rules
+sudo iptables-save | sudo tee /etc/iptables/rules.v4
+

@@ -2,7 +2,6 @@
 
 IP=192.168.0.200
 NETMASK=255.255.255.0
-GATEWAY=192.168.0.254
 IFACE=eth0
 PORT=5432
 SERVER_IP=192.168.0.10
@@ -24,7 +23,6 @@ auto $IFACE
 iface $IFACE inet static
     address $IP
     netmask $NETMASK
-    gateway $GATEWAY
 EOF
 
 # Restart the network to apply the configurations
@@ -33,16 +31,22 @@ sudo systemctl restart NetworkManager
 ###########
 # Firewall
 ###########
-# Check if UFW is installed, install if missing
-if ! command -v ufw &> /dev/null; then
-    sudo apt update
-    sudo apt install ufw -y
-fi
 
-# Enable UFW
-sudo ufw reset
-sudo ufw --force enable
+# Clean old firewall rules
+sudo iptables -F
+sudo iptables -X
 
-# Rules, only allow communications from the server to the correct port
-sudo ufw allow from $SERVER_IP to any port $PORT proto tcp
-sudo ufw reload
+# Default
+sudo iptables -P INPUT DROP
+sudo iptables -P OUTPUT ACCEPT
+sudo iptables -P FORWARD DROP
+
+# Loopback
+sudo iptables -A INPUT -i lo -j ACCEPT
+
+# Allow DB communications
+sudo iptables -A INPUT -p tcp -s $SERVER_IP --dport $PORT -j ACCEPT
+sudo iptables -A OUTPUT -p tcp -d $SERVER_IP --sport $PORT -j ACCEPT
+
+# Save rules
+sudo iptables-save | sudo tee /etc/iptables/rules.v4

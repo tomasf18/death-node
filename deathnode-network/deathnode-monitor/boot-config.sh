@@ -17,21 +17,21 @@ sudo ifconfig $IFACE_CLIENT1 192.168.1.254 netmask $NETMASK up
 # client2 network
 sudo ifconfig $IFACE_CLIENT2 192.168.2.254 netmask $NETMASK up
 
-# Persist in the file /etc/network/interfaces.d/monitor.cfg
+# Persist in the file monitor.cfg
 cat <<EOF | sudo tee /etc/network/interfaces.d/monitor.cfg
 auto $IFACE_CLIENT1
 iface $IFACE_CLIENT1 inet static
-    address $CLIENT_IP1
+    address 192.168.1.254
     netmask $NETMASK
 
 auto $IFACE_CLIENT2
 iface $IFACE_CLIENT2 inet static
-    address $CLIENT_IP2
+    address 192.168.2.254
     netmask $NETMASK
 
 auto $IFACE_SERVER
 iface $IFACE_SERVER inet static
-    address $IP_SERVER
+    address 192.168.0.254
     netmask $NETMASK
 EOF
 
@@ -47,18 +47,27 @@ sudo iptables -F FORWARD           # Flushes all the rules from chain FORWARD
 ###########
 # Firewall
 ###########
-# Check if UFW is installed, install if missing
-if ! command -v ufw &> /dev/null; then
-    sudo apt update
-    sudo apt install ufw -y
-fi
 
-# Enable UFW
-sudo ufw reset
-sudo ufw --force enable
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
+# Clean old firewall rules
+sudo iptables -F
+sudo iptables -t nat -F
+sudo iptables -X
+sudo iptables -t nat -X
 
-# Rules
-sudo ufw allow $PORT/tcp
-sudo ufw reload
+# Default
+sudo iptables -P INPUT DROP
+sudo iptables -P OUTPUT ACCEPT
+sudo iptables -P FORWARD DROP
+
+# Loopback
+sudo iptables -A INPUT -i lo -j ACCEPT
+
+# Allow Server <-> Clients
+sudo iptables -A FORWARD -i $IFACE_SERVER -o $IFACE_CLIENT1 -j ACCEPT
+sudo iptables -A FORWARD -i $IFACE_CLIENT1 -o $IFACE_SERVER -j ACCEPT
+
+sudo iptables -A FORWARD -i $IFACE_SERVER -o $IFACE_CLIENT2 -j ACCEPT
+sudo iptables -A FORWARD -i $IFACE_CLIENT2 -o $IFACE_SERVER -j ACCEPT
+
+# Save rules
+sudo iptables-save | sudo tee /etc/iptables/rules.v4

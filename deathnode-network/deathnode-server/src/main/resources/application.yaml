@@ -6,7 +6,7 @@ spring:
   application:
     name: deathnode-server
   datasource:
-    url: jdbc:postgresql://localhost:5432/deathnode
+    url: jdbc:postgresql://192.168.0.200:5432/deathnode
     username: dn_admin
     password: dn_pass
     driver-class-name: org.postgresql.Driver
