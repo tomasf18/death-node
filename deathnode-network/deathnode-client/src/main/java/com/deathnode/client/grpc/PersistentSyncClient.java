@@ -217,8 +217,13 @@ public class PersistentSyncClient {
                     else existingEnvelopes++;
                 }
 
+                // Poll all synchronized reports
+                for (int i = 0; i < existingEnvelopes; i++) {
+                    pendingEnvelopes.removeFirst();
+                }
+
                 // Clear pending buffer after successful sync
-                pendingEnvelopes.clear();
+                // pendingEnvelopes.clear();
                 currentRoundId = null;
 
                 System.out.println("Sync completed: " + newEnvelopes + " new, " + existingEnvelopes + " existing envelopes");

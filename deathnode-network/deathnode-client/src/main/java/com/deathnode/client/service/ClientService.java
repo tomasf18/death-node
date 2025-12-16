@@ -7,9 +7,12 @@ import com.deathnode.common.model.*;
 import com.deathnode.common.util.HashUtils;
 import com.deathnode.tool.SecureDocumentProtocol;
 import com.google.gson.*;
+import com.google.gson.reflect.TypeToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.FileReader;
+import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.*;
@@ -49,6 +52,32 @@ public class ClientService {
         String location = scanner.nextLine().trim();
 
         return createReport(suspect, description, location);
+    }
+
+    /**
+     * Create a report using an already existing list of templates.
+     */
+    public void createRandomReport() throws Exception {
+        Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
+
+        System.out.print("Reports to create: ");
+        int n = sc.nextInt();
+
+        record Report(String suspect, String description, String location) {};
+        Type listType = new TypeToken<List<Report>>(){}.getType();
+
+        List<Report> reports;
+        try (FileReader reader = new FileReader("reports.json")) {
+            reports = gson.fromJson(reader, listType);
+        }
+
+        Report r;
+        Random rd = new Random();
+        for (int i = 0; i < n; i++) {
+            r = reports.get(rd.nextInt(reports.size()));
+            createReport(r.suspect, r.description, r.location);
+        }
+
     }
 
     /**

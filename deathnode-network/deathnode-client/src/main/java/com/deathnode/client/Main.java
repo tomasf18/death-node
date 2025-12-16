@@ -55,6 +55,10 @@ public class Main {
                         clientService.createReportInteractive(sc);
                         break;
 
+                    case "create-random":
+                        clientService.createRandomReport();
+                        break;
+
                     case "list-reports":
                         clientService.listReports();
                         break;
