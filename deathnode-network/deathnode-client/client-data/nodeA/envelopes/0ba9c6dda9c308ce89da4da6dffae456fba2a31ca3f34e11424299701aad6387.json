@@ -1,0 +1,32 @@
+{
+    "metadata": {
+        "report_id": "09a4b92a-dce7-42b8-b793-59cae0454a30",
+        "metadata_timestamp": "2025-12-16T09:50:03.834197841Z",
+        "report_creation_timestamp": "2025-12-16T09:50:03.825670187Z",
+        "node_sequence_number": 1,
+        "prev_envelope_hash": "",
+        "signer": {
+            "node_id": "nodeA",
+            "alg": "Ed25519"
+        }
+    },
+    "key_encrypted": {
+        "encryption_algorithm": "RSA-OAEP-SHA256",
+        "key_per_node": [
+            {
+                "node": "nodeB",
+                "encrypted_key": "gJpPI8ggCvL1mnAFenc1OSX-xDuR4LeePLegtO6V8GO-MeQfghJcVH9g3t49vjbaW7Ftqv01JZnprC3CnBQSKYN-CIE-0FxfkXu8v5bneyOvGTiVSMkHntzpJmjY4FQZhBZ0A1XzBRclYWUwgIDf7ir8tvNJUm_l7wX6Jl0WoUxIfi4JmseOpf1QGycxP0AOflBAaNM1DVMaJSqhxAM6YymORS01Yu90UP9owaGi-SaAYAMkQeKrMZ76emW5f0XPX7xmVkCZl0tJVtK38fhtN3NW7qG9yzo-58_eOH7NGaDxM9V__f9bArJ3ONy8MzAzqTqDMLoWUMsV3wisDMem7A"
+            },
+            {
+                "node": "nodeA",
+                "encrypted_key": "PGwvSsY-IhBbM-PQH_s8GmmJvnQcM8u3lJArTaqmoeVZWAOYQH0KS0CV8sjun5KetuUAXQxF54X3_50JdDUhF5xAIgMzsy2vsnfzrq9hFKz7YwT-S8NfnfffEQURgK0EO-DtX3kQuuR99HrAi5KrffgrIOrzeqRnQMgCnze5OhnAwOQA9_6R8Gdj3eFxIcGgecZNC5lQcuiq_Kb_b0CfTV8HCoV3bpbeNMVvytjLM6RXEMtVzSOEujceSWKCCg9jblUMTcj1fUrpiT6vje1DNdL_ROYlf2HVpqvnEy9AISehv4aO7VF0teNiEzdjh6D-2HvWHbXFjLcVehnopnDrQQ"
+            }
+        ]
+    },
+    "report_encrypted": {
+        "encryption_algorithm": "AES-256-GCM",
+        "nonce": "500NgzI2RFHrRy8U",
+        "ciphertext": "VBHvGZoP7CgkX77vgrVNiUyFuF8r-vZOaElUqSfuGf9ynvTgNzYdZtsP-NMUyKbEZ9YeDEgP1PJvrxOhbunt-mQMUarHTbxBIgJz6emzl7p1o29VAbj1zDX_KRIqR2bdYSvg9WXgc97kf-4abUOLppSkYM5yW3fFiW02qTu1FMcXB-P6weatYPMIHGTEZBNRCY17eel2jdZwpnrv80YggCL79vPzn0nO3bGPX5qpkbEdwiOvCW1_EVgacQFX7u4apTJ2pCWlf1zj6_eKwjot676i6ugJ6ZsqD-Fy6VlWvf84GCdbgPGzyIkX5mJ1tVrZq0ypDV_zZXnDaXDJyAi-UbOGnOyUZrwm_GqRyferca_fpH_UFxvu4_XafvzBH4g8Gzxf1e3Cgo4Ja8orVavpBeNcv35HE21wPM-8_a40bX-yKUWlE5WfQhTVUTGuJxIdUruoTsiqbEbuYLkGMFXpGxoZLzIjGLU",
+        "tag": "Hedo02Qtq828VojN-H6GSg"
+    }
+}

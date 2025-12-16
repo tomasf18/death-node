@@ -235,8 +235,7 @@ public class ClientService {
                 PublicKey senderPub = KeyUtils.publicKeyFromBase64(senderKeyB64, "Ed25519");
 
                 // Decrypt and verify
-                Report decrypted = SecureDocumentProtocol.unprotect(
-                        envelope, rsaPriv, Config.getNodeSelfId(), senderPub);
+                Report decrypted = SecureDocumentProtocol.unprotect(envelope, rsaPriv, Config.getNodeSelfId(), senderPub);
 
                 System.out.println("  [OK] Report: " + decrypted.getReportId());
                 System.out.println("       Pseudonym: " + decrypted.getReporterPseudonym());
