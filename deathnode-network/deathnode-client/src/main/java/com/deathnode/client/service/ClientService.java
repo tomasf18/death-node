@@ -4,12 +4,9 @@ import com.deathnode.client.config.Config;
 import com.deathnode.client.grpc.PersistentSyncClient;
 import com.deathnode.client.utils.KeyUtils;
 import com.deathnode.common.model.*;
-import com.deathnode.common.util.HashUtils;
 import com.deathnode.tool.SecureDocumentProtocol;
 import com.google.gson.*;
 import com.google.gson.reflect.TypeToken;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.FileReader;
 import java.lang.reflect.Type;
@@ -23,8 +20,6 @@ import java.util.*;
  * Main client service for report management and synchronization.
  */
 public class ClientService {
-
-    private static final Logger log = LoggerFactory.getLogger(ClientService.class);
     
     private final DatabaseService db;
     private final PersistentSyncClient syncClient;
@@ -86,7 +81,7 @@ public class ClientService {
      * @return Envelope hash of the created report
      */
     public String createReport(String suspect, String description, String location) throws Exception {
-        log.info("Creating report: suspect={}, location={}", suspect, location);
+        System.out.println("Creating report: suspect=" + suspect + ", location=" + location);
 
         // 1. Build Report object
         String reportId = UUID.randomUUID().toString();
@@ -141,7 +136,7 @@ public class ClientService {
         Path written = envelope.writeSelf(outDir);
         String envelopeHash = envelope.computeHashHex();
 
-        log.info("Created envelope: {} (seq={})", written.getFileName(), nextSeq);
+        System.out.println("Created envelope: " + written.getFileName() + " (seq=" + nextSeq + ")");
 
         // 7. Save to DB
         db.insertReport(envelopeHash, written.toString(), Config.getNodeSelfId(), nextSeq, null, metadata.getMetadataTimestamp(), prevHash);
@@ -152,7 +147,7 @@ public class ClientService {
 
         // 9. Auto-sync if threshold reached
         if (syncClient.getPendingCount() >= Config.BUFFER_THRESHOLD_TO_SYNC) {
-            log.info("Buffer threshold reached ({}) - triggering sync", Config.BUFFER_THRESHOLD_TO_SYNC);
+            System.out.println("Buffer threshold reached (" + Config.BUFFER_THRESHOLD_TO_SYNC + ") - triggering sync");
             syncReports();
         }
 
@@ -169,7 +164,7 @@ public class ClientService {
             return;
         }
 
-        log.info("Triggering sync of {} pending reports", pending);
+        System.out.println("Triggering sync of " + pending + " pending reports");
         System.out.println("Initiating sync round with " + pending + " pending reports...");
         
         syncClient.triggerSync();
@@ -272,7 +267,7 @@ public class ClientService {
                 PublicKey pk = KeyUtils.publicKeyFromBase64(keyB64, "RSA");
                 recipients.put(nodeId, pk);
             } catch (Exception e) {
-                log.warn("Failed to parse enc_pub_key for node {}: {}", nodeId, e.getMessage());
+                System.err.println("Failed to parse enc_pub_key for node " + nodeId + ": " + e.getMessage());
             }
         }
 

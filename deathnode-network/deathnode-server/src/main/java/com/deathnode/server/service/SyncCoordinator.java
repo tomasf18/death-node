@@ -7,9 +7,11 @@ import com.deathnode.common.model.Envelope;
 import com.deathnode.common.model.Metadata;
 import com.deathnode.common.util.HashUtils;
 import com.deathnode.server.entity.Node;
+import com.deathnode.server.entity.NodeSyncState;
 import com.deathnode.server.entity.ReportEntity;
 import com.deathnode.server.grpc.SyncRound;
 import com.deathnode.server.repository.NodeRepository;
+import com.deathnode.server.repository.NodeSyncStateRepository;
 import com.deathnode.server.repository.ReportRepository;
 import com.google.gson.*;
 import io.grpc.stub.StreamObserver;
@@ -33,6 +35,7 @@ public class SyncCoordinator {
     
     private final NodeRepository nodeRepository;
     private final ReportRepository reportRepository;
+    private final NodeSyncStateRepository nodeSyncStateRepository;
     private final FileStorageService fileStorageService;
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().create();
     private final Map<String, ClientConnection> allConnections = new HashMap<>();
@@ -42,10 +45,12 @@ public class SyncCoordinator {
 
     public SyncCoordinator(NodeRepository nodeRepository,
                           ReportRepository reportRepository,
-                          FileStorageService fileStorageService) {
+                          FileStorageService fileStorageService,
+                          NodeSyncStateRepository nodeSyncStateRepository) {
         this.nodeRepository = nodeRepository;
         this.reportRepository = reportRepository;
         this.fileStorageService = fileStorageService;
+        this.nodeSyncStateRepository = nodeSyncStateRepository;
     }
 
     /**
@@ -213,6 +218,13 @@ public class SyncCoordinator {
                 String filename = meta.hash + ".json";
                 Path filePath = fileStorageService.store(meta.envelopeBytes, filename, meta.signerNode.getNodeId());
 
+                // Update NodeSyncState
+                NodeSyncState syncState = new NodeSyncState();
+                syncState.setNode(meta.signerNode);
+                syncState.setNodeId(meta.signerNode.getNodeId());
+                syncState.setLastSequenceNumber(meta.envelope.getMetadata().getNodeSequenceNumber());
+                syncState.setLastEnvelopeHash(meta.hash);
+
                 // Create DB entity
                 ReportEntity entity = new ReportEntity();
                 entity.setEnvelopeHash(meta.hash);
@@ -224,6 +236,7 @@ public class SyncCoordinator {
                 entity.setFilePath(filePath.toString());
 
                 reportRepository.save(entity);
+                nodeSyncStateRepository.save(syncState);
 
                 orderedBytes.add(meta.envelopeBytes);
                 orderedHashes.add(meta.hash);

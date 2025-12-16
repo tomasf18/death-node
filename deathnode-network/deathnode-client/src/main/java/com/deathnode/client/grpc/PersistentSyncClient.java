@@ -24,7 +24,7 @@ import java.util.concurrent.*;
 public class PersistentSyncClient {
     private final DatabaseService db;
     private final GrpcConnectionManager connectionManager;
-    private final List<String> pendingEnvelopes = new CopyOnWriteArrayList<>();
+    private final Queue<String> pendingEnvelopes = new ConcurrentLinkedQueue<>();
     
     private StreamObserver<ClientMessage> requestObserver;
     private volatile boolean connected = false;
@@ -219,11 +219,9 @@ public class PersistentSyncClient {
 
                 // Poll all synchronized reports
                 for (int i = 0; i < existingEnvelopes; i++) {
-                    pendingEnvelopes.removeFirst();
+                    pendingEnvelopes.poll(); // Remove from pending buffer
                 }
 
-                // Clear pending buffer after successful sync
-                // pendingEnvelopes.clear();
                 currentRoundId = null;
 
                 System.out.println("Sync completed: " + newEnvelopes + " new, " + existingEnvelopes + " existing envelopes");
