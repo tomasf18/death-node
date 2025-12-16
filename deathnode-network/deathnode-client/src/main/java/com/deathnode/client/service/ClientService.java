@@ -224,6 +224,13 @@ public class ClientService {
                     continue;
                 }
 
+                // Verify envelope hash
+                String envelopeHash = envelope.computeHashHex();
+                if (!envelopeHash.equals(row.envelopeHash)) {
+                    System.out.println("  [ERROR] Envelope hash mismatch: computed=" + envelopeHash + ", expected=" + row.envelopeHash);
+                    continue;
+                }
+
                 // Load sender public key
                 String senderId = envelope.getMetadata().getSignerNodeId();
                 String senderKeyB64 = db.getSignPubKey(senderId);
