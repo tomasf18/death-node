@@ -1,11 +1,5 @@
 package com.deathnode.server.service;
 
-import com.deathnode.server.entity.Node;
-import com.deathnode.server.entity.NodeSyncState;
-import com.deathnode.server.repository.NodeRepository;
-import com.deathnode.server.repository.NodeSyncStateRepository;
-import com.deathnode.server.repository.ReportRepository;
-import com.deathnode.server.repository.SignedBlockMerkleRootRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -14,7 +8,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 
 /**
  * Manages database operations including reinitialization.
@@ -22,26 +15,11 @@ import java.util.List;
 @Service
 public class DatabaseManager {
 
-    private final NodeRepository nodeRepository;
-    private final NodeSyncStateRepository nodeSyncStateRepository;
-    private final ReportRepository reportRepository;
-    private final SignedBlockMerkleRootRepository signedBlockMerkleRootRepository;
-    private final FileStorageService fileStorageService;
     private final Path envelopesPath;
     private final JdbcTemplate jdbcTemplate;
 
-    public DatabaseManager(NodeRepository nodeRepository,
-                          NodeSyncStateRepository nodeSyncStateRepository,
-                          ReportRepository reportRepository,
-                          SignedBlockMerkleRootRepository signedBlockMerkleRootRepository,
-                          FileStorageService fileStorageService,
-                          JdbcTemplate jdbcTemplate,
+    public DatabaseManager(JdbcTemplate jdbcTemplate,
                           @Value("${storage.envelopes-path}") String envelopesDir) {
-        this.nodeRepository = nodeRepository;
-        this.nodeSyncStateRepository = nodeSyncStateRepository;
-        this.reportRepository = reportRepository;
-        this.signedBlockMerkleRootRepository = signedBlockMerkleRootRepository;
-        this.fileStorageService = fileStorageService;
         this.jdbcTemplate = jdbcTemplate;
         this.envelopesPath = Path.of(envelopesDir);
     }
