@@ -30,3 +30,15 @@ keystore_path: server-data/keys/keystore.jks
 keystore_password: demonstration
 ed_private_key_alias: sign-key
 rsa_private_key_alias: rsa-key
+
+# logging:
+#   level:
+#     # Disable Hibernate SQL statements
+#     org.hibernate.SQL: OFF
+#     # Disable parameter binding logs (Hibernate 5)
+#     org.hibernate.type.descriptor.sql.BasicBinder: OFF
+#     # Disable parameter binding logs (Hibernate 6)
+#     org.hibernate.orm.jdbc.bind: OFF
+#     # Keep Spring JPA at warn to reduce noise
+#     org.springframework.orm.jpa: WARN
+#     org.springframework.jdbc.core: WARN

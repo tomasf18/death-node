@@ -65,6 +65,8 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                     handleHello(clientMessage.getHello());
                 } else if (clientMessage.hasBufferUpload()) {
                     handleBufferUpload(clientMessage.getBufferUpload());
+                } else if (clientMessage.hasError()) {
+                    handleError(clientMessage.getError());
                 } else {
                     System.out.println("Received unknown client message type from " + this.nodeId);
                 }
@@ -153,7 +155,9 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                 builder.addPerNodeSignedBufferRoots(bufferRootMsg);
             }
 
-            builder.setPrevBlockRoot(ByteString.copyFrom(result.getPrevBlockRoot()));
+            if (result.getPrevBlockRoot() != null) {
+                builder.setPrevBlockRoot(ByteString.copyFrom(result.getPrevBlockRoot()));
+            }
 
             ServerMessage msg = ServerMessage.newBuilder()
                     .setSyncResult(builder.build())
@@ -163,7 +167,6 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
         }
 
         private void sendError(String code, String message) {
-            // Fully qualify to avoid collision with java.lang.Error
             Error error = Error.newBuilder()
                 .setCode(code)
                 .setMessage(message)
@@ -174,6 +177,10 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                     .build();
 
             responseObserver.onNext(msg);
+        }
+
+        private void handleError(Error error) {
+            System.err.println("Client '" + this.nodeId + "' error [" + error.getCode() + "]: " + error.getMessage());
         }
 
         @Override

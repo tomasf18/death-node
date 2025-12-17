@@ -1,13 +1,20 @@
 package com.deathnode.common.util;
 
-import com.deathnode.common.model.Envelope;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Arrays;
 
 public class MerkleUtils {
     public static byte[] computeMerkleRoot(List<byte[]> envelopes) {
-        List<byte[]> currentLayer = new ArrayList<>(envelopes);
+        if (envelopes == null || envelopes.isEmpty()) {
+            return HashUtils.sha256(new byte[0]);
+        }
+
+        // start from hashed leaves so root is always 32 bytes
+        List<byte[]> currentLayer = new ArrayList<>(envelopes.size());
+        for (byte[] leaf : envelopes) {
+            currentLayer.add(HashUtils.sha256(leaf));
+        }
 
         while (currentLayer.size() > 1) {
             List<byte[]> nextLayer = new ArrayList<>();
@@ -23,13 +30,11 @@ public class MerkleUtils {
             currentLayer = nextLayer;
         }
 
-        byte[] merkleRoot = currentLayer.get(0);
-
-        return merkleRoot; 
+        return currentLayer.get(0);
     }
 
     public static boolean verifyMerkleRoot(List<byte[]> envelopes, byte[] expectedRoot) {
-        byte[] computedRootHex = computeMerkleRoot(envelopes);
-        return Arrays.equals(computedRootHex, expectedRoot);
+        byte[] computedRoot = computeMerkleRoot(envelopes);
+        return Arrays.equals(computedRoot, expectedRoot);
     }
 }

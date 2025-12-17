@@ -244,10 +244,13 @@ public class SyncCoordinator {
                 String filename = meta.hash + ".json";
                 Path filePath = fileStorageService.store(meta.envelopeBytes, filename, meta.signerNode.getNodeId());
 
-                // Update NodeSyncState
-                NodeSyncState syncState = new NodeSyncState();
-                syncState.setNode(meta.signerNode);
-                syncState.setNodeId(meta.signerNode.getNodeId());
+                // Update or create NodeSyncState (upsert)
+                NodeSyncState syncState = nodeSyncStateRepository.findByNodeId(meta.signerNode.getNodeId());
+                if (syncState == null) {
+                    syncState = new NodeSyncState();
+                    syncState.setNode(meta.signerNode);
+                    syncState.setNodeId(meta.signerNode.getNodeId());
+                }
                 syncState.setLastSequenceNumber(meta.envelope.getMetadata().getNodeSequenceNumber());
                 syncState.setLastEnvelopeHash(meta.hash);
 
@@ -319,7 +322,8 @@ public class SyncCoordinator {
     public boolean verifyEnvelopeChain(Node node, List<Envelope> envelopes) {
         NodeSyncState syncState = nodeSyncStateRepository.findByNodeId(node.getNodeId());
         String lastHash = (syncState != null) ? syncState.getLastEnvelopeHash() : null;
-        long expectedSeq = (syncState != null) ? syncState.getLastSequenceNumber() + 1 : 1L;
+        Long lastSeqObj = (syncState != null) ? syncState.getLastSequenceNumber() : null;
+        long expectedSeq = (lastSeqObj != null) ? lastSeqObj + 1 : 1L;
 
         for (Envelope env : envelopes) {
             Metadata meta = env.getMetadata();

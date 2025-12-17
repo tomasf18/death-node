@@ -11,6 +11,23 @@ option java_multiple_files = true;
 // ============================================================================
 
 /**
+ * Simple acknowledgment message.
+ */
+message Ack {
+  bool success = 1;
+  string message = 2;
+}
+
+/**
+ * Error message.
+ */
+message Error {
+  string code = 1;
+  string message = 2;
+  repeated string details = 3;
+}
+
+/**
  * Initial handshake message from client.
  */
 message Hello {
@@ -41,6 +58,8 @@ message ClientMessage {
   oneof body {
     Hello hello = 1;
     BufferUpload buffer_upload = 2;
+    Ack ack = 3;
+    Error error = 4;
   }
 }
 
@@ -86,23 +105,6 @@ message SignedBufferRoot {
   string node_id = 1;
   bytes buffer_root = 2;
   bytes signed_buffer_root = 3;
-}
-
-/**
- * Simple acknowledgment message.
- */
-message Ack {
-  bool success = 1;
-  string message = 2;
-}
-
-/**
- * Error message.
- */
-message Error {
-  string code = 1;
-  string message = 2;
-  repeated string details = 3;
 }
 
 /**

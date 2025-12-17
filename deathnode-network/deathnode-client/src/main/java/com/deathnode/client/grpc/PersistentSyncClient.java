@@ -4,6 +4,7 @@ import com.deathnode.client.config.Config;
 import com.deathnode.client.service.DatabaseService;
 import com.deathnode.tool.util.KeyLoader;
 import com.deathnode.common.grpc.*;
+import com.deathnode.common.grpc.Error;
 import com.deathnode.common.model.Envelope;
 import com.deathnode.common.model.Metadata;
 import com.deathnode.common.util.HashUtils;
@@ -19,6 +20,7 @@ import java.security.Key;
 import java.security.PrivateKey;
 import java.util.*;
 import java.util.concurrent.*;
+import java.sql.SQLException;
 
 /**
  * Persistent gRPC client that maintains an open connection to the server.
@@ -56,7 +58,7 @@ public class PersistentSyncClient {
         SyncServiceGrpc.SyncServiceStub asyncStub = connectionManager.getAsyncStub();
         
         // Open bidirectional stream
-        requestObserver = asyncStub.sync(new ServerResponseHandler());
+        requestObserver = asyncStub.sync(new ServerResponseHandler(db));
 
         // Send Hello
         Hello hello = Hello.newBuilder()
@@ -141,6 +143,14 @@ public class PersistentSyncClient {
      */
     private class ServerResponseHandler implements StreamObserver<ServerMessage> {
 
+        private final DatabaseService db;
+        VerificationsHandler verificationsHandler;
+
+        public ServerResponseHandler(DatabaseService db) {
+            this.db = db;
+            this.verificationsHandler = new VerificationsHandler(db);
+        }
+
         @Override
         public void onNext(ServerMessage serverMessage) {
             try {
@@ -184,7 +194,9 @@ public class PersistentSyncClient {
                 PrivateKey signPrivateKey = KeyLoader.loadPrivateKeyFromKeystore(Config.ED_PRIVATE_KEY_ALIAS, Config.getKeystorePath(), Config.KEYSTORE_PASSWORD);
                 // Compute and sign Merkle root
                 byte[] merkleRoot = MerkleUtils.computeMerkleRoot(envelopesToSend);
+                System.out.println("Computed Merkle root for buffer: " + HashUtils.bytesToHex(merkleRoot));
                 byte[] signedMerkleRoot = SecureDocumentProtocol.signData(merkleRoot, signPrivateKey);
+                System.out.println("Signed Merkle root for buffer: " + HashUtils.bytesToHex(signedMerkleRoot));
 
                 builder.setBufferRoot(ByteString.copyFrom(merkleRoot));
                 builder.setSignedBufferRoot(ByteString.copyFrom(signedMerkleRoot));
@@ -203,7 +215,39 @@ public class PersistentSyncClient {
         }
 
         private void handleSyncResult(SyncResult result) {
+            String roundId = result.getRoundId();
+            List<byte[]> orderedEnvelopes = new ArrayList<>();
+            for (int i = 0; i < result.getOrderedEnvelopesCount(); i++) {
+                    orderedEnvelopes.add(result.getOrderedEnvelopes(i).toByteArray());
+            }
+            long blockNumber = result.getBlockNumber();
+            byte[] blockRoot = result.getBlockRoot().toByteArray();
+            byte[] signedBlockRoot = result.getSignedBlockRoot().toByteArray();
+            List<SignedBufferRoot> perNodeSignedBufferRoots = result.getPerNodeSignedBufferRootsList();
+            byte[] prevBlockRoot = result.getPrevBlockRoot().toByteArray();
+
             System.out.println("Received SyncResult for round: " + result.getRoundId() + " (" + result.getOrderedEnvelopesCount() + " envelopes)");
+
+            VerificationsHandler.VerificationsResult verificationsResult = verificationsHandler.performAllVerifications(
+                    roundId,
+                    orderedEnvelopes,
+                    blockNumber,
+                    blockRoot,
+                    signedBlockRoot,
+                    perNodeSignedBufferRoots,
+                    prevBlockRoot
+            );
+            
+            if (!verificationsResult.isSuccess()) {
+                sendError(verificationsResult.getErrorCode(), verificationsResult.getErrorMessage());
+                return; 
+            }
+            
+            try {
+                db.upsertBlockState(blockNumber, HashUtils.bytesToHex(blockRoot));
+            } catch (SQLException e) {
+                System.err.println("Failed to update block state in DB: " + e.getMessage());
+            }
 
             try {
                 int newEnvelopes = 0;
@@ -212,11 +256,8 @@ public class PersistentSyncClient {
                 // Process each ordered envelope
                 for (int i = 0; i < result.getOrderedEnvelopesCount(); i++) {
                     byte[] envelopeBytes = result.getOrderedEnvelopes(i).toByteArray();
-                    String hash = (i < result.getEnvelopeHashesCount()) 
-                            ? result.getEnvelopeHashes(i)
-                            : HashUtils.sha256Hex(envelopeBytes);
 
-                    boolean isNew = processReceivedEnvelope(envelopeBytes, hash);
+                    boolean isNew = processReceivedEnvelope(envelopeBytes);
                     if (isNew) newEnvelopes++;
                     else existingEnvelopes++;
                 }
@@ -236,9 +277,9 @@ public class PersistentSyncClient {
             }
         }
 
-        private boolean processReceivedEnvelope(byte[] envelopeBytes, String hash) {
+        private boolean processReceivedEnvelope(byte[] envelopeBytes) {
+            String hash = HashUtils.sha256Hex(envelopeBytes);
             try {
-                // Store file
                 String filename = hash + ".json";
                 Path outDir = Paths.get(Config.getEnvelopesDir());
                 Files.createDirectories(outDir);
@@ -279,7 +320,7 @@ public class PersistentSyncClient {
                         isNew = false;
                         System.out.println("Envelope already exists: " + filename);
                     }
-                } catch (java.sql.SQLException e) {
+                } catch (SQLException e) {
                     // Unique constraint - already exists
                 }
 
@@ -298,8 +339,21 @@ public class PersistentSyncClient {
             }
         }
 
-        private void handleError(com.deathnode.common.grpc.Error error) {
+        private void handleError(Error error) {
             System.err.println("Server error [" + error.getCode() + "]: " + error.getMessage());
+        }
+
+        private void sendError(String code, String message) {
+            Error error = Error.newBuilder()
+                .setCode(code)
+                .setMessage(message)
+                .build();
+
+            ClientMessage msg = ClientMessage.newBuilder()
+                    .setError(error)
+                    .build();
+
+            PersistentSyncClient.this.requestObserver.onNext(msg);
         }
 
         @Override

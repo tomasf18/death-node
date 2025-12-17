@@ -145,6 +145,30 @@ public class DatabaseService {
         }
     }
 
+    public LastBlockInfo getLastBlockInfo() throws SQLException {
+        String sql = "SELECT id, last_block_number, last_block_root FROM block_state";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(sql); ResultSet rs = p.executeQuery()) {
+            if (rs.next()) {
+                LastBlockInfo info = new LastBlockInfo();
+                info.setId(rs.getInt(1));
+                info.setBlockNumber(rs.getLong(2));
+                info.setBlockRoot(rs.getString(3));
+                return info;
+            }
+            return null;
+        }
+    }
+
+    public void upsertBlockState(long blockNumber, String blockRoot) throws SQLException {
+        String sql = "INSERT INTO block_state(id, last_block_number, last_block_root) VALUES(1, ?, ?) "
+                   + "ON CONFLICT(id) DO UPDATE SET last_block_number = excluded.last_block_number, last_block_root = excluded.last_block_root";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setLong(1, blockNumber);
+            p.setString(2, blockRoot);
+            p.executeUpdate();
+        }
+    }
+
     public List<ReportRow> listReports() throws SQLException {
         String sql = "SELECT envelope_hash, signer_node_id, node_sequence_number, global_sequence_number, metadata_timestamp, prev_envelope_hash, file_path FROM reports ORDER BY global_sequence_number ASC";
         List<ReportRow> list = new ArrayList<>();
@@ -176,6 +200,32 @@ public class DatabaseService {
         }
     }
 
+    public ReportRow getLastSyncedReportOfNode(String nodeId) throws SQLException {
+        String sql = "SELECT envelope_hash, signer_node_id, node_sequence_number, global_sequence_number, " +
+                     "metadata_timestamp, prev_envelope_hash, file_path FROM reports " +
+                     "WHERE signer_node_id = ? AND global_sequence_number IS NOT NULL " +
+                     "ORDER BY node_sequence_number DESC LIMIT 1";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setString(1, nodeId);
+            try (ResultSet rs = p.executeQuery()) {
+                if (rs.next()) {
+                    ReportRow r = new ReportRow();
+                    r.envelopeHash = rs.getString(1);
+                    r.signerNodeId = rs.getString(2);
+                    r.nodeSequenceNumber = rs.getLong(3);
+                    r.globalSequenceNumber = rs.getLong(4);
+                    if (rs.wasNull()) r.globalSequenceNumber = null;
+                    r.metadataTimestamp = rs.getString(5);
+                    r.prevEnvelopeHash = rs.getString(6);
+                    if (rs.wasNull()) r.prevEnvelopeHash = null;
+                    r.filePath = rs.getString(7);
+                    return r;
+                }
+                return null;
+            }
+        }
+    }
+
     /** Simple row holder for report listings. */
     public static class ReportRow {
         public String envelopeHash;
@@ -185,6 +235,19 @@ public class DatabaseService {
         public String metadataTimestamp;
         public String prevEnvelopeHash;
         public String filePath;
+    }
+
+    public static class LastBlockInfo {
+        private int id;
+        private long blockNumber;
+        private String blockRoot;
+
+        public int getId() { return id; }
+        public void setId(int id) { this.id = id; }
+        public long getBlockNumber() { return blockNumber; }
+        public void setBlockNumber(long blockNumber) { this.blockNumber = blockNumber; }
+        public String getBlockRoot() { return blockRoot; }
+        public void setBlockRoot(String blockRoot) { this.blockRoot = blockRoot; }
     }
 
     public void resetDatabase() throws IOException, SQLException {

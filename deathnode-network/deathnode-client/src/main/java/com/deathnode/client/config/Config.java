@@ -5,6 +5,7 @@ public class Config {
     private static String NODE_PSEUDONYM = null;     // generated randomly if not set
     
     // Server configuration
+    public static final String SERVER_NODE_ID = "server";
     public static final String SERVER_HOST = "127.0.0.1"; // adapt for VMs later
     public static final int SERVER_PORT = 9090;
     
@@ -15,6 +16,10 @@ public class Config {
     public static final String KEYSTORE_PASSWORD = "demonstration";  // just for the project demo
     public static final String ED_PRIVATE_KEY_ALIAS = "sign-key";    // alias under which Ed25519 private key is stored
     public static final String RSA_PRIVATE_KEY_ALIAS = "rsa-key";    // alias under which RSA private key is stored
+
+    // Security tool config
+    public static final String ENCRYPTION_KEYS_ALG = "RSA";
+    public static final String SIGNING_KEYS_ALG = "Ed25519";
     
     // Database schema location
     public static final String SCHEMA_SQL = "client_schema.sql";

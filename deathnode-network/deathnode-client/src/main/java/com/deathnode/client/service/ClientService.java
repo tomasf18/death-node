@@ -113,7 +113,7 @@ public class ClientService {
         metadata.setNodeSequenceNumber(nextSeq);
         metadata.setPrevEnvelopeHash(prevHash);
         metadata.setSignerNodeId(Config.getNodeSelfId());
-        metadata.setSignerAlg("Ed25519");
+        metadata.setSignerAlg(Config.SIGNING_KEYS_ALG);
 
         // 3. Load signing key (Ed25519)
         PrivateKey signerPriv = KeyLoader.loadPrivateKeyFromKeystore(Config.ED_PRIVATE_KEY_ALIAS, Config.getKeystorePath(), Config.KEYSTORE_PASSWORD);
@@ -239,7 +239,7 @@ public class ClientService {
                     continue;
                 }
 
-                PublicKey senderPub = KeyLoader.pemStringToPublicKey(senderKeyB64, "Ed25519");
+                PublicKey senderPub = KeyLoader.pemStringToPublicKey(senderKeyB64, Config.SIGNING_KEYS_ALG);
 
                 // Decrypt and verify
                 Report decrypted = SecureDocumentProtocol.unprotect(envelope, rsaPriv, Config.getNodeSelfId(), senderPub);
@@ -270,7 +270,7 @@ public class ClientService {
             }
 
             try {
-                PublicKey pk = KeyLoader.pemStringToPublicKey(keyB64, "RSA");
+                PublicKey pk = KeyLoader.pemStringToPublicKey(keyB64, Config.ENCRYPTION_KEYS_ALG);
                 recipients.put(nodeId, pk);
             } catch (Exception e) {
                 System.err.println("Failed to parse enc_pub_key for node " + nodeId + ": " + e.getMessage());
