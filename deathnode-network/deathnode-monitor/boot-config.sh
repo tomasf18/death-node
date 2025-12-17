@@ -62,6 +62,9 @@ sudo iptables -P FORWARD DROP
 # Loopback
 sudo iptables -A INPUT -i lo -j ACCEPT
 
+# Masquerade the clients ip
+sudo iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+
 # Allow Server <-> Clients
 sudo iptables -A FORWARD -i $IFACE_SERVER -o $IFACE_CLIENT1 -j ACCEPT
 sudo iptables -A FORWARD -i $IFACE_CLIENT1 -o $IFACE_SERVER -j ACCEPT

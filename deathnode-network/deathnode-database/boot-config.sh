@@ -33,13 +33,14 @@ sudo systemctl restart NetworkManager
 ###########
 
 # Clean old firewall rules
-sudo iptables -F
-sudo iptables -X
+sudo iptables -F INPUT
+sudo iptables -F OUTPUT
+sudo iptables -F FORWARD
 
 # Default
 sudo iptables -P INPUT DROP
 sudo iptables -P OUTPUT ACCEPT
-sudo iptables -P FORWARD DROP
+sudo iptables -P FORWARD ACCEPT
 
 # Loopback
 sudo iptables -A INPUT -i lo -j ACCEPT
