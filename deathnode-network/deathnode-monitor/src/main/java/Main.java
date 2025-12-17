@@ -12,13 +12,16 @@ public class Main {
 
     public static void main(String[] args) {
 
-        String interfaceName = "eth0";
-
-        // TODO saber config da rede... quantas interfaces?
+        String i1 = "eth1";
+        String i2 = "eth2";
 
         Aggregator aggregator = new Aggregator();
-        Sniffer sniffer = new Sniffer(interfaceName, aggregator);
+
+        Sniffer sniffer = new Sniffer(i1, aggregator);
+        Sniffer sniffer2 = new Sniffer(i2, aggregator);
+
         new Thread(sniffer).start();
+        new Thread(sniffer2).start();
 
         ScheduledExecutorService scheduler =
                 Executors.newSingleThreadScheduledExecutor();
@@ -28,8 +31,7 @@ public class Main {
          */
         scheduler.scheduleAtFixedRate(() -> {
 
-            Map<String, Aggregator.NodeStats> snapshot =
-                    aggregator.snapshotAndReset();
+            Map<String, Aggregator.NodeStats> snapshot = aggregator.snapshotAndReset();
 
             if (snapshot.isEmpty()) {
                 return;
@@ -39,28 +41,32 @@ public class Main {
                     .mapToLong(s -> s.bytesOut.sum())
                     .sum();
 
-            for (Map.Entry<String, Aggregator.NodeStats> entry
-                    : snapshot.entrySet()) {
+            // --- Limpar consola ---
+            System.out.print("\033[H\033[2J"); // ANSI escape: cursor home + clear screen
+            System.out.flush();
+
+            // --- Print table header ---
+            System.out.println("------------------------------------------------------------");
+            System.out.printf("%-15s | %-10s | %-10s | %-7s%n", "SRC IP", "BYTES", "PACKETS", "SHARE");
+            System.out.println("------------------------------------------------------------");
+
+            for (Map.Entry<String, Aggregator.NodeStats> entry : snapshot.entrySet()) {
 
                 String ip = entry.getKey();
                 long bytes = entry.getValue().bytesOut.sum();
                 long packets = entry.getValue().packets.sum();
+                double share = totalBytes == 0 ? 0.0 : (double) bytes / totalBytes;
 
-                double share = (double) bytes / totalBytes;
+                // Print table row
+                System.out.printf("%-15s | %-10d | %-10d | %-6.1f%%%n",
+                        ip, bytes, packets, share * 100);
 
-                // --- Decision logic ---
-                if (bytes > MAX_BYTES || share > MAX_SHARE || packets > MAX_PACKETS) {
-
-                    System.out.printf(
-                            "[Decision] %s abusive: %d bytes/s (%.1f%%)%n",
-                            ip, bytes, share * 100
-                    );
-
-                    // TODO enforce action against abuser
-                }
             }
 
+            System.out.println("------------------------------------------------------------");
+
         }, 1, 1, TimeUnit.SECONDS);
+
 
         System.out.println("[Monitor] Decision loop running");
 
