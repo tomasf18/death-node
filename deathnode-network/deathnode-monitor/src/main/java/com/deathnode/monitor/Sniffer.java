@@ -1,3 +1,5 @@
+package com.deathnode.monitor;
+
 import org.pcap4j.core.BpfProgram;
 import org.pcap4j.core.NotOpenException;
 import org.pcap4j.core.PacketListener;
@@ -52,7 +54,7 @@ public class Sniffer implements Runnable {
         PacketListener listener = this::processPacket;
 
         System.out.println(
-                "[Sniffer] Listening on " + interfaceName
+                "[com.deathnode.monitor.Sniffer] Listening on " + interfaceName
         );
 
         handle.loop(-1, listener);
