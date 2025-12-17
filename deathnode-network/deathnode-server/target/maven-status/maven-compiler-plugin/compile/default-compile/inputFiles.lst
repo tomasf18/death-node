@@ -1,0 +1,15 @@
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/grpc/SyncServiceImpl.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/DeathnodeServerApplication.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/repository/NodeSyncStateRepository.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/entity/SignedBlockMerkleRoot.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/grpc/SyncRound.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/service/FileStorageService.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/service/SyncCoordinator.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/entity/ReportEntity.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/config/ApplicationInitializer.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/repository/SignedBlockMerkleRootRepository.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/service/DatabaseManager.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/repository/ReportRepository.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/entity/Node.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/repository/NodeRepository.java
+/mnt/c/Users/pitne/Documents/SIRS25/A53-DeathNode/A53-DeathNode/deathnode-network/deathnode-server/src/main/java/com/deathnode/server/entity/NodeSyncState.java

@@ -1,0 +1,12 @@
+com/deathnode/client/config/Config.class
+com/deathnode/client/service/ClientService$1.class
+com/deathnode/client/service/DatabaseInitializer.class
+com/deathnode/client/grpc/PersistentSyncClient.class
+com/deathnode/client/service/ClientService.class
+com/deathnode/client/utils/KeyUtils.class
+com/deathnode/client/service/ClientService$1Report.class
+com/deathnode/client/service/DatabaseService$ReportRow.class
+com/deathnode/client/grpc/GrpcConnectionManager.class
+com/deathnode/client/grpc/PersistentSyncClient$ServerResponseHandler.class
+com/deathnode/client/service/DatabaseService.class
+com/deathnode/client/Main.class

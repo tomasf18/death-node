@@ -35,17 +35,18 @@ public class Main {
 
             Map<String, Aggregator.NodeStats> snapshot = aggregator.snapshotAndReset();
 
+            // --- Limpar consola ---
+            System.out.print("\033[H\033[2J"); // ANSI escape: cursor home + clear screen
+            System.out.flush();
+
             if (snapshot.isEmpty()) {
+                System.out.println("No snapshot found");
                 return;
             }
 
             long totalBytes = snapshot.values().stream()
                     .mapToLong(s -> s.bytesOut.sum())
                     .sum();
-
-            // --- Limpar consola ---
-            System.out.print("\033[H\033[2J"); // ANSI escape: cursor home + clear screen
-            System.out.flush();
 
             // --- Print table header ---
             System.out.println("------------------------------------------------------------");
