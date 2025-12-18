@@ -23,7 +23,7 @@ public class Main {
         Sniffer sniffer2 = new Sniffer(i2, aggregator);
 
         new Thread(sniffer).start();
-        new Thread(sniffer2).start();
+        //new Thread(sniffer2).start();
 
         ScheduledExecutorService scheduler =
                 Executors.newSingleThreadScheduledExecutor();
@@ -32,17 +32,16 @@ public class Main {
          * Decision loop: every second, check activity for the last 10 seconds.
          */
         scheduler.scheduleAtFixedRate(() -> {
-
             Map<String, Aggregator.NodeStats> snapshot = aggregator.snapshotAndReset();
-
-            // --- Limpar consola ---
-            System.out.print("\033[H\033[2J"); // ANSI escape: cursor home + clear screen
-            System.out.flush();
 
             if (snapshot.isEmpty()) {
                 System.out.println("No snapshot found");
                 return;
             }
+
+            // --- Limpar consola ---
+            System.out.print("\033[2J\033[H\033[3J"); // Clear screen + clear scrollback
+            System.out.flush();
 
             long totalBytes = snapshot.values().stream()
                     .mapToLong(s -> s.bytesOut.sum())
@@ -68,7 +67,7 @@ public class Main {
 
             System.out.println("------------------------------------------------------------");
 
-        }, 1, 1, TimeUnit.SECONDS);
+        }, 1, 10, TimeUnit.SECONDS);
 
 
         System.out.println("[Monitor] Decision loop running");

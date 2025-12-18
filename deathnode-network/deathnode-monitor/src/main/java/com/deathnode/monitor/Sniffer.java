@@ -12,6 +12,9 @@ import org.pcap4j.packet.IpV4Packet;
 import org.pcap4j.packet.Packet;
 import org.pcap4j.packet.TcpPacket;
 
+import java.util.List;
+import java.util.Scanner;
+
 public class Sniffer implements Runnable {
 
     private final String interfaceName;
@@ -35,9 +38,17 @@ public class Sniffer implements Runnable {
 
         PcapNetworkInterface nif = Pcaps.getDevByName(interfaceName);
         if (nif == null) {
-            throw new IllegalStateException(
-                    "Interface de rede não encontrada: " + interfaceName
-            );
+            List<PcapNetworkInterface> allDevs = Pcaps.findAllDevs();
+            for (PcapNetworkInterface dev : allDevs) {
+                System.out.println(dev.getName() + " -> " + dev.getDescription());
+            }
+            Scanner scanner = new Scanner(System.in);
+            nif = Pcaps.getDevByName(scanner.nextLine());
+            if (nif == null) {
+                throw new IllegalStateException(
+                        "Interface de rede não encontrada: " + interfaceName
+                );
+            }
         }
 
         PcapHandle handle = nif.openLive(
@@ -54,31 +65,33 @@ public class Sniffer implements Runnable {
         PacketListener listener = this::processPacket;
 
         System.out.println(
-                "[com.deathnode.monitor.Sniffer] Listening on " + interfaceName
+                "[com.deathnode.monitor.Sniffer] Listening on " + nif.getName()
         );
 
         handle.loop(-1, listener);
     }
 
     private void processPacket(Packet packet) {
+        System.out.println("Packet class: " + packet.getClass().getName());
+        System.out.println("Packet: " + packet);
 
+        // Navega pelas camadas do pacote
         IpV4Packet ipPacket = packet.get(IpV4Packet.class);
-        TcpPacket tcpPacket = packet.get(TcpPacket.class);
 
-        if (ipPacket == null || tcpPacket == null) {
+        if (ipPacket == null) {
             return;
         }
 
-        String srcIp =
-                ipPacket.getHeader()
-                        .getSrcAddr()
-                        .getHostAddress();
+        TcpPacket tcpPacket = ipPacket.get(TcpPacket.class);
 
-        String dstIp =
-                ipPacket.getHeader()
-                        .getDstAddr()
-                        .getHostAddress();
+        if (tcpPacket == null) {
+            return;
+        }
 
+        System.out.println("Processing packet: " + tcpPacket);
+
+        String srcIp = ipPacket.getHeader().getSrcAddr().getHostAddress();
+        String dstIp = ipPacket.getHeader().getDstAddr().getHostAddress();
         int packetSize = packet.length();
 
         aggregator.record(srcIp, packetSize);
