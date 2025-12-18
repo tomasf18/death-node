@@ -31,8 +31,8 @@ public class Main {
         System.out.println();
 
         DatabaseService db = new DatabaseService();
+        db.resetDatabase(); 
         ClientService clientService = new ClientService(db);
-        clientService.resetDatabase(); // for testing purposes, reset DB on each start
         
         Scanner sc = new Scanner(System.in, StandardCharsets.UTF_8);
 

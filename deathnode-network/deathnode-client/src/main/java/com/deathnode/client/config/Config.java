@@ -55,12 +55,20 @@ public class Config {
         return "client-data/" + NODE_SELF_ID + "/keys/keystore.jks";
     }
 
-    public static String getPublicKeysDir() {
-        return "public_keys/";
-    }
-
     public static String getNodeKeysDir() {
         return "client-data/" + NODE_SELF_ID + "/keys/";
+    }
+
+    public static String getCaCertificate() {
+        return getNodeKeysDir() + "ca-cert.pem";
+    }
+
+    public static String getSelfCertificate() {
+        return getNodeKeysDir() + "tls-cert.pem";
+    }
+
+    public static String getSelfGrpcPrivateKey() {
+        return getNodeKeysDir() + "tls-key.pem";
     }
 
     private static String generateRandomPseudonym() {
