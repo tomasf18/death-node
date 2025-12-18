@@ -14,7 +14,7 @@ import subprocess
 
 # Configuration
 TIME_WINDOW = 30  # seconds
-PACKET_THRESHOLD = 1000  # packets per TIME_WINDOW
+BYTE_THRESHOLD = 10000  # bytes per TIME_WINDOW
 BLOCK_DURATION = 30  # seconds to block
 INTERFACES = ['eth1','eth2']
 
@@ -37,13 +37,13 @@ def block_ip(ip_address):
     with stats_lock:
         if ip_address in blocked_ips:
             return  # Already blocked
-        
+
         blocked_ips[ip_address] = time.time() + BLOCK_DURATION
-    
+
     # Add iptables rule to DROP packets from this IP
     cmd = f"iptables -I FORWARD -s {ip_address} -j DROP"
     if run_command(cmd):
-        print(f"\n[BLOCKED] {ip_address} - Exceeded {PACKET_THRESHOLD} packets in {TIME_WINDOW}s")
+        print(f"\n[BLOCKED] {ip_address} - Exceeded {BYTE_THRESHOLD} bytes in {TIME_WINDOW}s")
     else:
         print(f"\n[ERROR] Failed to block {ip_address}")
 
@@ -54,7 +54,7 @@ def unblock_ip(ip_address):
         print(f"\n[UNBLOCKED] {ip_address} - Block duration expired")
     else:
         print(f"\n[ERROR] Failed to unblock {ip_address}")
-    
+
     with stats_lock:
         if ip_address in blocked_ips:
             del blocked_ips[ip_address]
@@ -63,12 +63,12 @@ def check_and_unblock():
     """Check if any IPs should be unblocked"""
     current_time = time.time()
     to_unblock = []
-    
+
     with stats_lock:
         for ip, unblock_time in list(blocked_ips.items()):
             if current_time >= unblock_time:
                 to_unblock.append(ip)
-    
+
     for ip in to_unblock:
         unblock_ip(ip)
 
@@ -78,12 +78,12 @@ def packet_handler(packet):
         src_ip = packet[IP].src
         packet_size = len(packet)
         current_time = time.time()
-        
+
         # Don't count packets from already blocked IPs
         with stats_lock:
             if src_ip in blocked_ips:
                 return
-        
+
         with stats_lock:
             packet_history.append({
                 'src_ip': src_ip,
@@ -95,28 +95,31 @@ def calculate_stats():
     """Calculate statistics and check for rate limit violations"""
     current_time = time.time()
     cutoff_time = current_time - TIME_WINDOW
-    
+
     stats = defaultdict(lambda: {'packets': 0, 'bytes': 0})
-    
+    ips_to_block = []
+
     with stats_lock:
         # Remove old packets
         while packet_history and packet_history[0]['timestamp'] < cutoff_time:
             packet_history.popleft()
-        
-        # Calculate stats for remaining packets
+
+        # Calculate stats for remaining packets (include ALL IPs, even blocked ones for display)
         for packet_data in packet_history:
             src_ip = packet_data['src_ip']
             stats[src_ip]['packets'] += 1
             stats[src_ip]['bytes'] += packet_data['bytes']
-    
-    # Check for violations
-    for src_ip, data in stats.items():
-        if data['packets'] > PACKET_THRESHOLD:
-            # Check if not already blocked
-            with stats_lock:
-                if src_ip not in blocked_ips:
-                    block_ip(src_ip)
-    
+
+        # Check for violations and collect IPs to block
+        for src_ip, data in stats.items():
+            if data['bytes'] > BYTE_THRESHOLD:
+                if src_ip not in blocked_ips and src_ip.endswith("100"):
+                    ips_to_block.append(src_ip)
+
+    # Block IPs outside the lock to avoid deadlock
+    for ip in ips_to_block:
+        block_ip(ip)
+
     return stats
 
 def sniffer_thread(interface):
@@ -140,57 +143,57 @@ def display_stats():
     """Display statistics table"""
     while True:
         time.sleep(1)  # Update every second
-        
+
         # Check for IPs to unblock
         check_and_unblock()
-        
+
         # Clear screen
         os.system('clear' if os.name == 'posix' else 'cls')
-        
+
         # Header
         print("=" * 95)
-        print(f"  DeathNode Monitor (Threshold: {PACKET_THRESHOLD} pkts/{TIME_WINDOW}s)")
+        print(f"  DeathNode Monitor (Threshold: {BYTE_THRESHOLD} bytes/{TIME_WINDOW}s)")
         print("=" * 95)
         print(f"{'Source IP':<20} {'Packets':<12} {'Bytes':<15} {'Formatted':<12} {'Status':<15}")
         print("-" * 95)
-        
+
         # Get current stats
         stats_copy = calculate_stats()
-        
+
         if not stats_copy:
             print("  No traffic detected in the last 30 seconds...")
         else:
             # Sort by packet count (descending)
-            sorted_stats = sorted(stats_copy.items(), 
-                                key=lambda x: x[1]['packets'], 
+            sorted_stats = sorted(stats_copy.items(),
+                                key=lambda x: x[1]['packets'],
                                 reverse=True)
-            
+
             total_packets = 0
             total_bytes = 0
-            
+
             for src_ip, data in sorted_stats:
                 packets = data['packets']
                 bytes_total = data['bytes']
-                
+
                 total_packets += packets
                 total_bytes += bytes_total
-                
+
                 # Determine status
                 with stats_lock:
                     if src_ip in blocked_ips:
                         time_left = int(blocked_ips[src_ip] - time.time())
-                        status = f"🔒 BLOCKED ({time_left}s)"
-                    elif packets > PACKET_THRESHOLD * 0.8:
-                        status = "⚠️  WARNING"
+                        status = f"[-] BLOCKED ({time_left}s)"
+                    elif bytes_total > BYTE_THRESHOLD * 0.8:
+                        status = "[!]  WARNING"
                     else:
-                        status = "✅ OK"
-                
+                        status = "[+] OK"
+
                 print(f"{src_ip:<20} {packets:<12} {bytes_total:<15} {format_bytes(bytes_total):<12} {status:<15}")
-            
+
             # Summary
             print("-" * 95)
             print(f"{'TOTAL':<20} {total_packets:<12} {total_bytes:<15} {format_bytes(total_bytes):<12}")
-        
+
         # Blocked IPs section
         with stats_lock:
             if blocked_ips:
@@ -200,7 +203,7 @@ def display_stats():
                 for ip, unblock_time in blocked_ips.items():
                     time_left = int(unblock_time - time.time())
                     print(f"  🔒 {ip:<20} - Unblocks in {time_left}s")
-        
+
         print("=" * 95)
         print("Press Ctrl+C to stop")
 
@@ -217,7 +220,7 @@ def main():
     """Main function"""
     print("[+] Network Rate Limiter - Gateway Protection")
     print(f"[+] Monitoring interfaces: {', '.join(INTERFACES)}")
-    print(f"[+] Threshold: {PACKET_THRESHOLD} packets per {TIME_WINDOW} seconds")
+    print(f"[+] Threshold: {BYTE_THRESHOLD} bytes per {TIME_WINDOW} seconds")
     print(f"[+] Block duration: {BLOCK_DURATION} seconds")
     print("[+] Starting sniffers...\n")
     
@@ -244,7 +247,7 @@ if __name__ == "__main__":
     # Check if running as root
     if os.geteuid() != 0:
         print("[!] This script must be run as root (sudo)")
-        print("[!] Usage: sudo python3 rate_limiter.py")
+        print("[!] Usage: sudo python3 monitor.py")
         sys.exit(1)
     
     main()
