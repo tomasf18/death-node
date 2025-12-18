@@ -47,6 +47,17 @@ public class SyncRound {
         return buffers.keySet().containsAll(expectedNodes);
     }
 
+    public synchronized boolean removeExpectedNode(String nodeId) {
+        boolean removed = expectedNodes.remove(nodeId);
+        return removed && isComplete();
+    }
+
+    public synchronized Set<String> getUnsubmittedNodes() {
+        Set<String> unsubmitted = new HashSet<>(expectedNodes);
+        unsubmitted.removeAll(buffers.keySet());
+        return unsubmitted;
+    }
+
     public synchronized Map<String, List<byte[]>> getBuffers() {
         return new HashMap<>(buffers);
     }

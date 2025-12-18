@@ -46,6 +46,7 @@ public class GrpcConnectionManager {
             channel = NettyChannelBuilder
                     .forAddress(serverHost, serverPort)
                     .sslContext(sslContext)
+                    .disableRetry() // Disable automatic retries
                     .build();
 
             asyncStub = SyncServiceGrpc.newStub(channel);

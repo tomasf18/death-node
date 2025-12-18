@@ -226,6 +226,35 @@ public class DatabaseService {
         }
     }
 
+    public void deleteReportFromDatabase(String envelopeHash) throws SQLException {
+        String query = "DELETE FROM reports WHERE envelope_hash = ?";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(query)) {
+            p.setString(1, envelopeHash);
+            p.executeUpdate();
+        }
+    }
+
+    public ReportRow getLastSyncedReport(String nodeId) throws SQLException {
+        String sql = "SELECT envelope_hash, signer_node_id, node_sequence_number, global_sequence_number, metadata_timestamp, prev_envelope_hash, file_path FROM reports WHERE signer_node_id = ? AND global_sequence_number IS NOT NULL ORDER BY node_sequence_number DESC LIMIT 1";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(sql)) {
+            p.setString(1, nodeId);
+            try (ResultSet rs = p.executeQuery()) {
+                if (rs.next()) {
+                    ReportRow r = new ReportRow();
+                    r.envelopeHash = rs.getString(1);
+                    r.signerNodeId = rs.getString(2);
+                    r.nodeSequenceNumber = rs.getLong(3);
+                    r.globalSequenceNumber = rs.getLong(4);
+                    r.metadataTimestamp = rs.getString(5);
+                    r.prevEnvelopeHash = rs.getString(6);
+                    r.filePath = rs.getString(7);
+                    return r;
+                }
+                return null;
+            }
+        }
+    }
+
     /** Simple row holder for report listings. */
     public static class ReportRow {
         public String envelopeHash;

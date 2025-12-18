@@ -33,6 +33,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -62,8 +65,12 @@ public class SyncCoordinator {
     @Value("${keystore_path}")
     private String keystorePath;
 
+    @Value("${sync.timeout-ms:5000}")
+    private long syncTimeoutMs;
+
     private SyncRound activeRound = null;
     private final Object roundLock = new Object();
+    private final ScheduledExecutorService timeoutExecutor = Executors.newScheduledThreadPool(1);
 
     public SyncCoordinator(NodeRepository nodeRepository,
             ReportRepository reportRepository,
@@ -97,11 +104,54 @@ public class SyncCoordinator {
             System.out.println("Started new sync round: " + roundId + " (initiator: " + initiatorNodeId
                     + ", expected nodes: " + expectedNodes + ")");
 
-            // BROADCAST RequestBuffer to ALL currently registered connections
             broadcastRequestBuffer(roundId);
+            scheduleRoundTimeout(roundId, activeRound);
 
             return roundId;
         }
+    }
+
+    /**
+     * Schedule a timeout task for the current round.
+     * If not all nodes submit within the timeout period, remove unresponsive nodes
+     * and finalize the round with remaining nodes.
+     */
+    private void scheduleRoundTimeout(String roundId, SyncRound round) {
+        timeoutExecutor.schedule(() -> {
+            synchronized (roundLock) {
+                if (activeRound != round) {
+                    System.out.println("Timeout for round " + roundId + " - but a newer round is active, ignoring");
+                    return;
+                }
+
+                Set<String> unsubmitted = round.getUnsubmittedNodes();
+                if (unsubmitted.isEmpty()) {
+                    System.out.println("Timeout for round " + roundId + " - but all nodes have submitted, ignoring");
+                    return;
+                }
+
+                System.out.println("TIMEOUT: Round " + roundId + " did not receive buffers from nodes: " + unsubmitted);
+
+                for (String nodeId : unsubmitted) {
+                    System.out.println("  Removing node " + nodeId + " from round " + roundId);
+                    round.removeExpectedNode(nodeId);
+                }
+
+                if (round.getExpectedNodes().isEmpty()) {
+                    System.out.println("Round " + roundId + " has no remaining nodes, aborting");
+                    activeRound = null;
+                    round.getCompletionFuture().completeExceptionally(
+                            new RuntimeException("Round aborted: no nodes submitted buffer"));
+                } else if (round.isComplete()) {
+                    System.out.println("Round " + roundId + " is now complete after timeout - finalizing");
+                    SyncRound completedRound = activeRound;
+                    activeRound = null;
+                    CompletableFuture.supplyAsync(() -> finalizeRound(completedRound));
+                } else {
+                    System.out.println("Round " + roundId + " still waiting for nodes after timeout: " + round.getUnsubmittedNodes());
+                }
+            }
+        }, syncTimeoutMs, TimeUnit.MILLISECONDS);
     }
 
     /**

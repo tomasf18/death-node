@@ -12,6 +12,9 @@ public class Config {
     
     // Sync configuration
     public static final int BUFFER_THRESHOLD_TO_SYNC = 2; // max buffered reports before triggering sync
+    public static final int SYNC_TIMEOUT_SECONDS = 10;   
+    public static final int MAX_ENVELOPES_TO_SEND_PER_SYNC = 5; 
+    public static final int INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS = 10; // seconds between checking for pending reports
     
     // Keystore configuration
     public static final String KEYSTORE_PASSWORD = "demonstration";  // just for the project demo
