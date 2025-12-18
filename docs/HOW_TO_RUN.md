@@ -10,7 +10,37 @@ mvn clean install
 ### 2. Run the Database
 
 ```bash
-docker run -d --name deathnode-db -e POSTGRES_DB=deathnode -e POSTGRES_USER=dn_admin -e POSTGRES_PASSWORD=dn_pass -p 5432:5432 postgres:18
+docker stop deathnode-db
+docker rm deathnode-db
+docker volume rm deathnode-db-certs
+
+chmod 600 deathnode-database/keys/tls-key.pem
+chmod 644 deathnode-database/keys/tls-cert.pem
+chmod 644 deathnode-database/keys/ca-cert.pem
+
+# Create a temporary container to copy files into the volume
+docker volume create deathnode-db-certs
+docker run --rm -v deathnode-db-certs:/certs -v $(pwd)/deathnode-database/keys:/src alpine sh -c \
+   "cp /src/tls-cert.pem /certs/server.crt && \
+   cp /src/tls-key.pem /certs/server.key && \
+   cp /src/ca-cert.pem /certs/root.crt && \
+   chown 999:999 /certs/* && \
+   chmod 600 /certs/server.key && \
+   chmod 644 /certs/server.crt /certs/root.crt"
+
+# Run PostgreSQL with volume mount
+docker run -d --name deathnode-db \
+  -e POSTGRES_DB=deathnode \
+  -e POSTGRES_USER=dn_admin \
+  -e POSTGRES_PASSWORD=dn_pass \
+  -v deathnode-db-certs:/var/lib/postgresql \
+  -v $(pwd)/deathnode-database/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf \
+  -p 5432:5432 \
+  postgres:18 \
+  -c ssl=on \
+  -c ssl_cert_file=/var/lib/postgresql/server.crt \
+  -c ssl_key_file=/var/lib/postgresql/server.key \
+  -c ssl_ca_file=/var/lib/postgresql/root.crt
 ```
 
 ### 3. Apply Database Schema
@@ -44,25 +74,18 @@ java -jar target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"
 
 ## How to run from scratch
 
-### 1. Build the Project
-
-```bash
-cd deathnode-network/
-mvn clean install
-```
-
 ### 2. Generate Keys for Nodes
 
 Use the new `keygen-nodes.sh` script to generate keys for one or more nodes:
 
 ```bash
-cd deathnode-client/
 
-# Generate keys for a single node
-./keygen-nodes.sh "nodeA"
-
-# Or generate keys for multiple nodes at once
-./keygen-nodes.sh "nodeA" "nodeB" "nodeC"
+cd deathnode-network/
+   ./generate-all-keys.sh ca
+   ./generate-all-keys.sh database
+   ./generate-all-keys.sh server
+   ./generate-all-keys.sh client nodeA
+   ./generate-all-keys.sh client nodeB
 ```
 
 **What this script does:**
@@ -74,12 +97,6 @@ cd deathnode-client/
 
 **Generated structure:**
 ```
-public_keys/
-├── nodeA_ed25519_pub.pem
-├── nodeA_rsa_pub.pem
-├── nodeB_ed25519_pub.pem
-└── nodeB_rsa_pub.pem
-
 data/
 ├── nodeA/
 │   ├── keys/
@@ -97,18 +114,66 @@ data/
 ### 3. Update Client Database Schema
 
 [client_schema.sql](./client_schema.sql) includes both DDL and DML statements to set up the database schema and insert public keys for the generated nodes.
-Go to [public_keys/](./public_keys/) and copy the public keys of each node into the appropriate `INSERT` statements in `client_schema.sql`, also inserting each node ID.
+Go to [../deathnode-network/deathnode-client/client-data/<node_id>/keys](../deathnode-network/deathnode-client/client-data/) and copy the Ed25519 and RSA public keys of each node into the appropriate `INSERT` statements in `client_schema.sql`, also inserting each node ID.
+Go to [../deathnode-network/deathnode-server/server-data/keys/](../deathnode-network/deathnode-server/server-data/keys/) and copy the server's public keys as well.
 **BE CAREFUL:** `enc_pub_key` is the RSA public key, while `sign_pub_key` is the Ed25519 public key. 
 
 ### 4. Update Server Database Schema
 
-[server_schema.sql](../deathnode-database/server_schema.sql) includes both DDL and DML statements to set up the server database schema and insert public keys for the generated nodes.
-Please update that file according to the nodes you generated, similar to the client schema update.
+[client_schema.sql](./client_schema.sql) includes both DDL and DML statements to set up the database schema and insert public keys for the generated nodes.
+Go to [../deathnode-network/deathnode-client/client-data/<node_id>/keys](../deathnode-network/deathnode-client/client-data/) and copy the Ed25519 and RSA public keys of each node into the appropriate `INSERT` statements in `client_schema.sql`, also inserting each node ID.
+Go to [../deathnode-network/deathnode-server/server-data/keys/](../deathnode-network/deathnode-server/server-data/keys/) and copy the server's public keys as well.
+
+**BE CAREFUL:** `enc_pub_key` is the RSA public key, while `sign_pub_key` is the Ed25519 public key. 
+
+
+### Run db 
+
+```bash
+docker stop deathnode-db
+docker rm deathnode-db
+docker volume rm deathnode-db-certs
+
+chmod 600 deathnode-database/keys/tls-key.pem
+chmod 644 deathnode-database/keys/tls-cert.pem
+chmod 644 deathnode-database/keys/ca-cert.pem
+
+# Create a temporary container to copy files into the volume
+docker volume create deathnode-db-certs
+docker run --rm -v deathnode-db-certs:/certs -v $(pwd)/deathnode-database/keys:/src alpine sh -c \
+   "cp /src/tls-cert.pem /certs/server.crt && \
+   cp /src/tls-key.pem /certs/server.key && \
+   cp /src/ca-cert.pem /certs/root.crt && \
+   chown 999:999 /certs/* && \
+   chmod 600 /certs/server.key && \
+   chmod 644 /certs/server.crt /certs/root.crt"
+
+# Run PostgreSQL with volume mount
+docker run -d --name deathnode-db \
+  -e POSTGRES_DB=deathnode \
+  -e POSTGRES_USER=dn_admin \
+  -e POSTGRES_PASSWORD=dn_pass \
+  -v deathnode-db-certs:/var/lib/postgresql \
+  -v $(pwd)/deathnode-database/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf \
+  -p 5432:5432 \
+  postgres:18 \
+  -c ssl=on \
+  -c ssl_cert_file=/var/lib/postgresql/server.crt \
+  -c ssl_key_file=/var/lib/postgresql/server.key \
+  -c ssl_ca_file=/var/lib/postgresql/root.crt
+```
 
 ### 5. Apply Database Schema
 
 ```bash 
 psql -h localhost -U dn_admin -d deathnode -f deathnode-database/server_schema.sql
+```
+
+### 1. Build the Project
+
+```bash
+cd deathnode-network/
+mvn clean install
 ```
 
 ### 6. Start the Server
@@ -122,13 +187,7 @@ mvn spring-boot:run
 
 ```bash
 # With default pseudonym (randomly generated)
-java -jar target/deathnode-client-1.0.0.jar "nodeA"
-
-# With custom pseudonym
-java -jar target/deathnode-client-1.0.0.jar "nodeA" "shadow_fox"
-
-# Run another node
-java -jar target/deathnode-client-1.0.0.jar "nodeB" "night_owl"
+java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
 ```
 
 ---
@@ -173,34 +232,13 @@ You can run multiple client instances on the same machine by using different nod
 
 ```bash
 # Terminal 1
-java -jar target/deathnode-client-1.0.0.jar "nodeA" "node_a"
+java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
 
 # Terminal 2
-java -jar target/deathnode-client-1.0.0.jar "nodeB" "node_b"
-
-# Terminal 3
-java -jar target/deathnode-client-1.0.0.jar "nodeC" "node_c"
+java -jar target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"
 ```
 
 Each maintains separate:
 - Database (`data/<node-id>/client.db`)
 - Envelopes (`data/<node-id>/envelopes/`)
 - Keystore (`data/<node-id>/keys/keystore.jks`)
-
-### Adding New Nodes
-
-To add a new node after initial setup:
-
-1. Generate its keys:
-   ```bash
-   ./keygen-nodes.sh "4.4.4.4"
-   ```
-
-2. Run the client:
-   ```bash
-   java -jar target/deathnode-client-1.0.0.jar "4.4.4.4"
-   ```
-
-3. Update the database schema to add the new node's public keys (or use a management utility).
-
----

@@ -5,7 +5,7 @@ set -e
 SHARED_ROOT="/mnt/c/Users/pitne/Documents/SIRS_shared"
 
 declare -A MODULES=(
-  [deathnode-client]="client1"
+  [deathnode-client]="nodeA"
   [deathnode-server]="server"
   [deathnode-database]="database"
   [deathnode-monitor]="monitor"

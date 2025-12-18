@@ -15,6 +15,7 @@ import java.nio.file.*;
 import java.security.*;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Main client service for report management and synchronization.
@@ -24,10 +25,16 @@ public class ClientService {
     private final DatabaseService db;
     private final PersistentSyncClient syncClient;
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
+    private final AtomicLong lastNodeSequenceNumber;
 
     public ClientService(DatabaseService db) {
         this.db = db;
         this.syncClient = new PersistentSyncClient(db, Config.SERVER_HOST, Config.SERVER_PORT);
+        try {
+            this.lastNodeSequenceNumber = new AtomicLong(db.getLastSequenceNumber(Config.getNodeSelfId()));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to initialize lastNodeSequenceNumber", e);
+        }
         
         // connect to server immediately (without starting sync)
         syncClient.connect();
@@ -101,8 +108,8 @@ public class ClientService {
         report.setStatus("pending_validation");
 
         // 2. Prepare metadata
-        long lastSeq = db.getLastSequenceNumber(Config.getNodeSelfId());
-        long nextSeq = lastSeq + 1;
+        long nextSeq = this.lastNodeSequenceNumber.incrementAndGet();
+
         String prevHash = db.getLastEnvelopeHash(Config.getNodeSelfId());
         if (prevHash == null) prevHash = "";
 

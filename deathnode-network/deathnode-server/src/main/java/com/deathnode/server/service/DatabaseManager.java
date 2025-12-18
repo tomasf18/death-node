@@ -39,15 +39,6 @@ public class DatabaseManager {
             jdbcTemplate.execute("DROP TABLE IF EXISTS signed_block_merkle_roots");
             jdbcTemplate.execute("DROP TABLE IF EXISTS reports");
             jdbcTemplate.execute("DROP TABLE IF EXISTS nodes_sync_state");
-            jdbcTemplate.execute("DROP TABLE IF EXISTS nodes");
-
-            System.out.println("Creating nodes table...");
-            jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS nodes (\n" +
-                    "    node_id                 VARCHAR(255)                PRIMARY KEY,\n" +
-                    "    pseudonym               TEXT                        NOT NULL,\n" +
-                    "    enc_pub_key             VARCHAR(900)                NOT NULL,\n" +
-                    "    sign_pub_key            VARCHAR(300)                NOT NULL\n" +
-                    ")");
 
             System.out.println("Creating nodes_sync_state table...");
             jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS nodes_sync_state (\n" +
@@ -77,19 +68,6 @@ public class DatabaseManager {
                     "    block_root                  VARCHAR(64)                 NOT NULL        UNIQUE,\n" +
                     "    prev_block_root             VARCHAR(64)\n" +
                     ")");
-
-            System.out.println("Inserting initial node data...");
-            jdbcTemplate.update("INSERT INTO nodes(node_id, pseudonym, enc_pub_key, sign_pub_key) VALUES (?, ?, ?, ?)",
-                    "nodeA",
-                    "AlphaNode",
-                    "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2Ub5h/yfqbaVXH5Emy4e\nEnPXyURp/8klVFJ/baDEthfsChrENdREERp1xCA5/6YuYVeiAJQ6rMJkFHjMLDnc\nmBnCAx2/Fb542IZrAM7DGI+pQPp3gbt9WMq46gW6tyvRFupi+whEca4Xnckw55qM\neZE7yX+Fqv8ekmPiNcikRjWYgucBoGib0QSQC0ThIl4rn/AWc8USTcOukziIlToS\nrfZK7aIGnwq6yM6aBq5HhNWQpsg5pqyZtrUFYurgycehh1qNuA0ILqwcgf7QAOrW\nmDn6CoSYks1UiJASJ2al0wp8/Fj35gVpPV2NaChd6QynjsmgV5LjOtNPj22nwhY/\njwIDAQAB\n-----END PUBLIC KEY-----",
-                    "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAxp6F4FBZ3pb47kGYxmcvsAXCq6p+Uv6n26iyI1aVs0E=\n-----END PUBLIC KEY-----");
-
-            jdbcTemplate.update("INSERT INTO nodes(node_id, pseudonym, enc_pub_key, sign_pub_key) VALUES (?, ?, ?, ?)",
-                    "nodeB",
-                    "BetaNode",
-                    "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvt7yJvvyjRUw2hHDv27m\nTz4teEkEWQDCHV1gBZlC75tPHMvwLBVsZJ2I9KEdeP/FiPA0b+hkiO//4s/DzJ2W\nhXTYeVlYl/D8nnTPJ6xd2I38dfKLPD3bWBViVhfLZ+q56Bgh0J0FS4e+wGaqRrZ5\nD4MxjtCPQLUaGB7mJUW5Xum2IFopz7fWmd0lcAG3XqRSnxNAntRpUCK0Z5epmTin\nbqYj7DbPCOMJt47qbNnSr2m1RkdbfSz1XpERZjeNA5Ysj0ZHtrs7ypyk7D24Aj+1\nolv60yS7CzmblFj8ylKPlyJRihm5FjNhW+7r4N7DcEmfv9K7S1TQfm+XkZW6FOrY\n3wIDAQAB\n-----END PUBLIC KEY-----",
-                    "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAbpf4IpdEFv/Az6nW5u7vE/j8q5oT2aDIcIVmKFheE8w=\n-----END PUBLIC KEY-----");
 
             System.out.println("Inserting initial nodes_sync_state...");
             jdbcTemplate.update("INSERT INTO nodes_sync_state(node_id, last_sequence_number, last_envelope_hash) VALUES (?, ?, ?)",

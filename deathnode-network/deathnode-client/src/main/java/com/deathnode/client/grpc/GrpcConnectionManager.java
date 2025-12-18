@@ -1,13 +1,15 @@
 package com.deathnode.client.grpc;
 
 import com.deathnode.common.grpc.SyncServiceGrpc;
-import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
+import io.grpc.*;
+import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
+import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
+import io.grpc.netty.shaded.io.netty.handler.ssl.SslContext;
 
-/**
- * Manages gRPC connection to the server.
- * Singleton pattern for shared channel.
- */
+import com.deathnode.client.config.Config;
+import javax.net.ssl.SSLException;
+import java.io.File;
+
 public class GrpcConnectionManager {
 
     private final String serverHost;
@@ -25,20 +27,35 @@ public class GrpcConnectionManager {
 
     private void connect() {
         if (channel != null && !channel.isShutdown() && !channel.isTerminated()) {
-            return; // Already connected
+            return;
         }
 
-        System.out.println("Connecting to server at " + serverHost + ":" + serverPort);
+        System.out.println("Connecting to server at " + serverHost + ":" + serverPort + " (TLS)");
 
-        channel = ManagedChannelBuilder
-                .forAddress(serverHost, serverPort)
-                .usePlaintext() // TODO: Switch to TLS for security
-                .build();
+        try {
+            // Build SSL context
+            SslContext sslContext = GrpcSslContexts.forClient()
+                    // Trust server cert (signed by CA)
+                    .trustManager(new File(Config.getCaCertificate()))
+                    // Client certificate for mutual TLS
+                    .keyManager(
+                            new File(Config.getSelfCertificate()),
+                            new File(Config.getSelfGrpcPrivateKey()))
+                    .build();
 
-        asyncStub = SyncServiceGrpc.newStub(channel);
-        blockingStub = SyncServiceGrpc.newBlockingStub(channel);
+            channel = NettyChannelBuilder
+                    .forAddress(serverHost, serverPort)
+                    .sslContext(sslContext)
+                    .build();
 
-        System.out.println("gRPC channel established");
+            asyncStub = SyncServiceGrpc.newStub(channel);
+            blockingStub = SyncServiceGrpc.newBlockingStub(channel);
+
+            System.out.println("gRPC TLS channel established");
+
+        } catch (SSLException e) {
+            throw new RuntimeException("Failed to configure TLS: " + e.getMessage(), e);
+        }
     }
 
     public SyncServiceGrpc.SyncServiceStub getAsyncStub() {
