@@ -21,6 +21,7 @@ INTERFACES = ['eth1','eth2']
 # Statistics storage
 packet_history = deque()
 blocked_ips = {}  # {ip: unblock_time}
+last_packets_per_ip = defaultdict(lambda: deque(maxlen=10))  # Store last 10 packet sizes per IP
 stats_lock = threading.Lock()
 
 def run_command(cmd):
@@ -91,6 +92,10 @@ def packet_handler(packet):
                 'timestamp': current_time
             })
 
+            # Store last 10 packet sizes for IPs ending in .100
+            if src_ip.endswith('.100'):
+                last_packets_per_ip[src_ip].append(packet_size)
+
 def calculate_stats():
     """Calculate statistics and check for rate limit violations"""
     current_time = time.time()
@@ -113,7 +118,7 @@ def calculate_stats():
         # Check for violations and collect IPs to block
         for src_ip, data in stats.items():
             if data['bytes'] > BYTE_THRESHOLD:
-                if src_ip not in blocked_ips and src_ip.endswith("100"):
+                if src_ip not in blocked_ips and src_ip.endswith(".100"):
                     ips_to_block.append(src_ip)
 
     # Block IPs outside the lock to avoid deadlock
@@ -184,7 +189,7 @@ def display_stats():
                         time_left = int(blocked_ips[src_ip] - time.time())
                         status = f"[-] BLOCKED ({time_left}s)"
                     elif bytes_total > BYTE_THRESHOLD * 0.8:
-                        status = "[!]  WARNING"
+                        status = "[!] WARNING"
                     else:
                         status = "[+] OK"
 
@@ -203,6 +208,19 @@ def display_stats():
                 for ip, unblock_time in blocked_ips.items():
                     time_left = int(unblock_time - time.time())
                     print(f"  🔒 {ip:<20} - Unblocks in {time_left}s")
+
+        # Last 10 packets for IPs ending in .100
+        with stats_lock:
+            ips_ending_100 = {ip: packets for ip, packets in last_packets_per_ip.items() if ip.endswith('.100')}
+            if ips_ending_100:
+                print("=" * 95)
+                print("  Last 10 Packet Sizes for Clients:")
+                print("-" * 95)
+                for ip in sorted(ips_ending_100.keys()):
+                    packets_list = list(ips_ending_100[ip])
+                    if packets_list:
+                        sizes_str = ', '.join([f"{size}B" for size in packets_list])
+                        print(f"  {ip:<20} [{sizes_str}]")
 
         print("=" * 95)
         print("Press Ctrl+C to stop")

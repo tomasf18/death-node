@@ -255,6 +255,7 @@ public class ClientService {
                 System.out.println("  [OK] Report: " + decrypted.getReportId());
                 System.out.println("       Pseudonym: " + decrypted.getReporterPseudonym());
                 System.out.println("       Suspect: " + decrypted.getContent().getSuspect());
+                System.out.println("       Location: " + decrypted.getContent().getLocation());
                 System.out.println("       Description: " + decrypted.getContent().getDescription());
 
             } catch (Exception e) {
