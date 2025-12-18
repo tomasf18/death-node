@@ -18,7 +18,6 @@
         <module>deathnode-tool</module>
         <module>deathnode-server</module>
         <module>deathnode-client</module>
-        <module>deathnode-monitor</module>
     </modules>
 
     <properties>
