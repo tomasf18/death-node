@@ -38,6 +38,7 @@ public class ClientService {
         
         // connect to server immediately (without starting sync)
         syncClient.connect();
+        startPendingReportsMonitor();
     }
 
     /**
@@ -289,6 +290,14 @@ public class ClientService {
 
     public int getPendingReportsCount() {
         return syncClient.getPendingCount();
+    }
+
+    public void startPendingReportsMonitor() {
+        syncClient.startPendingReportsMonitor();
+    }
+
+    public void stopPendingReportsMonitor() {
+        syncClient.stopPendingReportsMonitor();
     }
 
     public void resetDatabase() throws Exception {

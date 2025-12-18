@@ -2,6 +2,7 @@ package com.deathnode.client.grpc;
 
 import com.deathnode.client.config.Config;
 import com.deathnode.client.service.DatabaseService;
+import com.deathnode.client.service.ReportCleanupService;
 import com.deathnode.tool.util.KeyLoader;
 import com.deathnode.common.grpc.*;
 import com.deathnode.common.grpc.Error;
@@ -16,7 +17,6 @@ import io.grpc.stub.StreamObserver;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.security.Key;
 import java.security.PrivateKey;
 import java.util.*;
 import java.util.concurrent.*;
@@ -31,15 +31,22 @@ import java.sql.SQLException;
 public class PersistentSyncClient {
     private final DatabaseService db;
     private final GrpcConnectionManager connectionManager;
+    private final ReportCleanupService cleanupService;
     private final Queue<String> pendingEnvelopes = new ConcurrentLinkedQueue<>();
+    private final ScheduledExecutorService timeoutExecutor = Executors.newScheduledThreadPool(1);
+    private final ScheduledExecutorService pendingReportsExecutor = Executors.newScheduledThreadPool(1);
     
     private StreamObserver<ClientMessage> requestObserver;
     private volatile boolean connected = false;
     private volatile String currentRoundId = null;
+    private volatile long roundStartTime = -1;
+    private volatile ScheduledFuture<?> timeoutTask = null;
+    private volatile ScheduledFuture<?> pendingReportsTask = null;
 
     public PersistentSyncClient(DatabaseService db, String serverHost, int serverPort) {
         this.db = db;
         this.connectionManager = new GrpcConnectionManager(serverHost, serverPort);
+        this.cleanupService = new ReportCleanupService(db);
     }
 
     /**
@@ -74,6 +81,120 @@ public class PersistentSyncClient {
         connected = true;
 
         System.out.println("Connected to server");
+    }
+
+    /**
+     * Start a periodic task that checks for pending reports every N seconds.
+     * If pending reports are found, it triggers a sync round.y
+     */
+    public void startPendingReportsMonitor() {
+        if (pendingReportsTask != null) {
+            System.out.println("Pending reports monitor already running");
+            return;
+        }
+
+        System.out.println("Starting pending reports monitor (interval: " + Config.INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS + " seconds)");
+        
+        pendingReportsTask = pendingReportsExecutor.scheduleAtFixedRate(() -> {
+            int pendingCount = pendingEnvelopes.size();
+            
+            if (pendingCount > 0) {
+                System.out.println("Found " + pendingCount + " pending reports. Triggering sync...");
+                triggerSync();
+            } else {
+                System.out.println("No pending reports found");
+            }
+        }, Config.INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS, Config.INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Stop the pending reports monitor.
+     */
+    public void stopPendingReportsMonitor() {
+        System.out.println("Stopping pending reports monitor");
+        if (pendingReportsTask != null) {
+            pendingReportsTask.cancel(false);
+            pendingReportsTask = null;
+        }
+    }
+
+    /**
+     * Handle connection timeout by cleaning up unsynced reports.
+     */
+    private void handleConnectionTimeout() {
+        System.err.println("=== NODE CORRUPTED ===");
+        System.err.println("Connection timeout detected. Cleaning up unsynced reports...");
+        
+        try {
+            ReportCleanupService.CleanupResult result = cleanupService.cleanupAllUnsyncedReports();
+            
+            System.out.println("Cleanup completed successfully:");
+            System.out.println("  - Total unsynced reports found: " + result.getTotalReportsFound());
+            System.out.println("  - Files deleted: " + result.getFilesDeleted());
+            System.out.println("  - Database records deleted: " + result.getDatabaseRecordsDeleted());
+            
+            if (!result.isComplete()) {
+                System.err.println("WARNING: Some deletions failed:");
+                for (String failedHash : result.getFailedDeletions()) {
+                    System.err.println("  - Failed to cleanup: " + failedHash);
+                }
+            }
+            
+            // Clear the buffer
+            int bufferSize = pendingEnvelopes.size();
+            pendingEnvelopes.clear();
+            System.out.println("Pending buffer cleared: " + bufferSize + " envelopes removed");
+            
+            System.err.println("=== RECOVERY COMPLETE ===");
+            System.err.println("All unsynced reports have been deleted. The node can now reconnect.");
+            
+        } catch (SQLException e) {
+            System.err.println("CRITICAL ERROR during cleanup: " + e.getMessage());
+            System.err.println("Manual intervention may be required to clean up unsynced reports.");
+        }
+    }
+
+    /**
+     * Start monitoring for sync round timeout.
+     * If no SyncResult is received within the timeout period, trigger cleanup.
+     */
+    private void startTimeoutMonitoring(String roundId) {
+        // Cancel any existing timeout task
+        cancelTimeoutMonitoring("Starting new timeout monitoring for round " + roundId);
+        
+        roundStartTime = System.currentTimeMillis();
+        currentRoundId = roundId;
+        
+        // Schedule a task to check for timeout
+        this.timeoutTask = timeoutExecutor.schedule(() -> {
+            synchronized (this) {
+                // Check if we're still in the same round
+                if (!roundId.equals(currentRoundId)) {
+                    return; // Round was completed or changed
+                }
+                
+                long elapsedMs = System.currentTimeMillis() - roundStartTime;
+                long timeoutMs = Config.SYNC_TIMEOUT_SECONDS * 1000;
+                
+                if (elapsedMs >= timeoutMs) {
+                    System.err.println("TIMEOUT: Round " + roundId + " exceeded " + Config.SYNC_TIMEOUT_SECONDS + " seconds");
+                    currentRoundId = null; // Clear round ID
+                    handleConnectionTimeout();
+                }
+            }
+        }, Config.SYNC_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Cancel the current timeout monitoring task.
+     */
+    private void cancelTimeoutMonitoring(String reason) {
+        System.out.println("Canceling timeout monitoring: " + reason);
+        if (this.timeoutTask != null) {
+            this.timeoutTask.cancel(false);
+            this.timeoutTask = null;
+        }
+        roundStartTime = -1;
     }
 
     /**
@@ -117,6 +238,9 @@ public class PersistentSyncClient {
                 .build();
 
         requestObserver.onNext(helloMsg);
+        
+        // Start timeout monitoring (UUID of round will be assigned by server, use a placeholder)
+        startTimeoutMonitoring("initiating-" + System.currentTimeMillis());
     }
 
     /**
@@ -135,7 +259,11 @@ public class PersistentSyncClient {
 
     public void shutdown() {
         disconnect();
+        cancelTimeoutMonitoring("Shutting down client");
+        stopPendingReportsMonitor();
         connectionManager.shutdown();
+        timeoutExecutor.shutdown();
+        pendingReportsExecutor.shutdown();
     }
 
     /**
@@ -160,6 +288,7 @@ public class PersistentSyncClient {
                     handleSyncResult(serverMessage.getSyncResult());
                 } else if (serverMessage.hasAck()) {
                     System.out.println("Server ACK: " + serverMessage.getAck().getMessage());
+                    cancelTimeoutMonitoring("Server ACK received in time");
                 } else if (serverMessage.hasError()) {
                     handleError(serverMessage.getError());
                 }
@@ -169,8 +298,11 @@ public class PersistentSyncClient {
         }
 
         private void handleRequestBuffer(RequestBuffer request) {
-            currentRoundId = request.getRoundId();
-            System.out.println("Server requested buffer for round: " + currentRoundId + " - sending " + pendingEnvelopes.size() + " envelopes");
+            // Cancel timeout monitoring - server answered in time
+            cancelTimeoutMonitoring("Server buffer request received in time");
+
+            String roundId = request.getRoundId();
+            System.out.println("Server requested buffer for round: " + roundId + " - sending " + pendingEnvelopes.size() + " envelopes");
 
             try {
                 // Build BufferUpload
@@ -179,8 +311,11 @@ public class PersistentSyncClient {
 
                 List<byte[]> envelopesToSend = new ArrayList<>();
 
-                // Add all pending envelopes
+                // Add MAX_ENVELOPES_TO_SEND_PER_SYNC pending envelopes
                 for (String pathStr : pendingEnvelopes) { // first-in, first-out, so buffer order is preserved when sending
+                    if (envelopesToSend.size() >= Config.MAX_ENVELOPES_TO_SEND_PER_SYNC) {
+                        break; // limit number of envelopes per sync
+                    }
                     try {
                         Path path = Paths.get(pathStr);
                         byte[] envelopeBytes = Files.readAllBytes(path);
@@ -207,7 +342,10 @@ public class PersistentSyncClient {
                         .build();
 
                 requestObserver.onNext(msg);
-                System.out.println("Sent buffer with " + builder.getEnvelopesCount() + " envelopes for round " + currentRoundId);
+
+                // Start timeout monitoring for this round
+                startTimeoutMonitoring(roundId);
+                System.out.println("Sent buffer with " + builder.getEnvelopesCount() + " envelopes for round " + roundId);
 
             } catch (Exception e) {
                 System.err.println("Failed to send buffer: " + e.getMessage());
@@ -215,6 +353,9 @@ public class PersistentSyncClient {
         }
 
         private void handleSyncResult(SyncResult result) {
+            // Cancel timeout monitoring - sync completed successfully
+            cancelTimeoutMonitoring("Sync result received in time");
+
             String roundId = result.getRoundId();
             List<byte[]> orderedEnvelopes = new ArrayList<>();
             for (int i = 0; i < result.getOrderedEnvelopesCount(); i++) {
@@ -340,7 +481,14 @@ public class PersistentSyncClient {
         }
 
         private void handleError(Error error) {
+            cancelTimeoutMonitoring("Server error received");
             System.err.println("Server error [" + error.getCode() + "]: " + error.getMessage());
+            try {
+                PersistentSyncClient.this.currentRoundId = null;
+                cleanupService.cleanupAllUnsyncedReports();
+            } catch (SQLException e) {
+                System.err.println("Failed to cleanup unsynced reports after server error: " + e.getMessage());
+            }
         }
 
         private void sendError(String code, String message) {
@@ -358,12 +506,14 @@ public class PersistentSyncClient {
 
         @Override
         public void onError(Throwable t) {
+            cancelTimeoutMonitoring("Server error received");
             System.err.println("gRPC stream error: " + t.getMessage());
             connected = false;
         }
 
         @Override
         public void onCompleted() {
+            cancelTimeoutMonitoring("Server closed connection");
             System.out.println("Server closed connection");
             connected = false;
         }

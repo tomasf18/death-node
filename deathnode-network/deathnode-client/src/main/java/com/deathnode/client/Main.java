@@ -67,9 +67,9 @@ public class Main {
                         clientService.syncReports();
                         break;
 
-                    case "reset-db": // DEBUGGING ONLY
-                        clientService.resetDatabase();
-                        break;
+                    // case "reset-db": // DEBUGGING ONLY
+                    //     clientService.resetDatabase();
+                    //     break;
 
                     case "help":
                         printHelp();
@@ -78,6 +78,8 @@ public class Main {
                     case "q":
                     case "exit":
                         System.out.println("Shutting down client.");
+                        sc.close();
+                        clientService.shutdown();
                         return;
 
                     default:
@@ -110,7 +112,7 @@ public class Main {
         System.out.println("  create-random     Create random reports from a premade list");
         System.out.println("  list-reports      List all reports");
         System.out.println("  sync              Start synchronization with the server");
-        System.out.println("  reset-db          DEBUGGING ONLY: Reset the local database");
+        // System.out.println("  reset-db          DEBUGGING ONLY: Reset the local database");
         System.out.println("  help              Show this help");
         System.out.println("  exit | q          Exit the client");
         System.out.println();
