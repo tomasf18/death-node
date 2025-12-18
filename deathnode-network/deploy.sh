@@ -40,4 +40,38 @@ for module in "${!MODULES[@]}"; do
     "$DEST_PATH/"
 done
 
+echo "==== Converting line endings to Unix format ===="
+
+# Verifica se dos2unix está instalado
+if ! command -v dos2unix &> /dev/null; then
+  echo "WARNING: dos2unix not found. Skipping conversion."
+  echo "Install with: sudo apt-get install dos2unix"
+else
+  for dest in "${MODULES[@]}"; do
+    DEST_PATH="$SHARED_ROOT/$dest"
+    echo "Converting files in $dest..."
+
+    # Converte ficheiros de texto comuns (ignora binários)
+    find "$DEST_PATH" -type f \( \
+      -name "*.sh" -o \
+      -name "*.properties" -o \
+      -name "*.yml" -o \
+      -name "*.yaml" -o \
+      -name "*.xml" -o \
+      -name "*.conf" -o \
+      -name "*.cfg" -o \
+      -name "*.txt" -o \
+      -name "*.json" -o \
+      -name "*.sql" -o \
+      -name "*.env" -o \
+      -name "Dockerfile" -o \
+      -name "Makefile" \
+    \) -exec dos2unix {} \; 2>/dev/null
+
+    # Dá permissões de execução aos scripts
+    find "$DEST_PATH" -type f -name "*.sh" -exec chmod +x {} \;
+  done
+  echo "Line endings converted successfully"
+fi
+
 echo "==== Done ===="
