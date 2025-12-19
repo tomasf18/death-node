@@ -1,6 +1,6 @@
 # CXX DeathNode / ChainOfProduct / CivicEcho Project Report
 
-## 1. Introduction
+## **1. Introduction**
 
 The project scenario that was assigned to us was DeathNode. Later on, we chose Challenge B as the security challenge to tackle.    
 
@@ -13,7 +13,7 @@ The remaining description of the project scenario is clear, so we did not have a
 **Note**: We are not including here the remaining interpretaion as it would be redundant with the scenario description.
 
 
-## 2. Goals 
+## **2. Goals** 
 
 Having the above interpretation of the project scenario clear and the scenario description in mind, we can now define what we want to protect and for what purpose.
 
@@ -31,7 +31,7 @@ And finally, related to the challenge approach:
 - Availability: Ensure that the system remains operational and accessible to legitimate participants, even in the presence of flooding attacks from misbehaving members, so that the network can continue to function effectively without disruption.
 
 
-## 3. Assumptions
+## **3. Assumptions**
 
 The DeathNode network follows a centralized synchronization model in which all nodes push reports to, and pull reports from, a central server. This server is responsible for coordinating synchronization but **is not trusted** with access to report contents: it must never be able to read plaintext data. All report contents remain encrypted **end-to-end** between authorized nodes.
 
@@ -46,25 +46,25 @@ Regarding the challenge, the description states "a vigilant server, appointed by
 The overall design explicitly separates three security goals: confidentiality of report content, integrity of individual reports, and global consistency of histories across nodes. Confidentiality is provided exclusively through encryption, while integrity and ordering are enforced through per-sender chaining and compact, signed cryptographic commitments. The implementation is intentionally lightweight and strictly focused on what is required to meet the project’s security requirements, avoiding unnecessary complexity or overengineering, as also recommended by the TA's.
 
 
-### Threat Model
+### **Threat Model**
 
 **(_Define who is fully trusted, partially trusted, or untrusted._)
 (_Define how powerful the attacker is, with capabilities and limitations, i.e., what can he do and what he cannot do_)**
 
 In this project, we consider the following trust levels.
 
-#### Fully Trusted 
+#### **Fully Trusted** 
 
 - The Certification Authority (CA) that issues and manages cryptographic keys and certificates for network nodes. 
 
-#### Partially Trusted
+#### **Partially Trusted**
 
 - Each Client Node: While client nodes are trusted to decrypt and read the reports they are authorized to access, they are not trusted with the integrity of the overall system. An attacker compromising a client node could attempt to tamper with report contents at rest (both in the local database or in the filesystem), inject forged reports, or withhold legitimate reports. However, the attacker cannot break cryptographic primitives or forge valid signatures without access to the node's private keys. Our solution mitigates these risks through integrity verification and consistency checks.
 
 - The Monitor Server: The monitor server is trusted to observe network activity and detect flooding attacks from misbehaving nodes. However, it is not trusted with access to report contents and is a potential attack target. A compromised monitor server could attempt to tamper with metadata or drop legitimate reports. It cannot forge cryptographic commitments or signatures that nodes verify independently.
 
 
-#### Untrusted
+#### **Untrusted**
 
 - The Network: The communication network is not trusted. It is assumed that an attacker could eavesdrop, intercept, modify, or inject messages during transmission between nodes. So all communications must be secured to prevent such attacks.
 
@@ -73,28 +73,28 @@ In this project, we consider the following trust levels.
 - The Database Server: The database server is not trusted with access to report contents. It is assumed that the database server could be compromised by an attacker who may attempt to read, modify, or delete reports during storage. Corresponding measures are taken to handle this risk.
 
 
-## 4. Solution Brief
+## **4. Solution Brief**
 
 **(_Brief solution description_)**
  
-## 5. Project Development
+## **5. Project Development**
 
 In this section, we describe the design and implementation of our solution to protect the DeathNode network reports.
 
-### 5.1 Secure Document Format (Security Library)
+### **5.1 Secure Document Format (Security Library)**
 
 This section describes the design rationale and implementation details of the secure document library we developed to protect DeathNode reports. The library exposes three operations (`protect`, `check`, `unprotect`) and implements confidentiality, integrity, authenticity and lightweight consistency guarantees required bythe four security requirements.
 
-#### 5.1.1 Solution Design
+#### **5.1.1 Solution Design**
 
-##### Goals
+##### **Goals**
 
 * **Confidentiality (SR1):** Only authorized nodes can read report contents. Achieved by encrypting the inner payload with a fresh symmetric Data Encryption Key (DEK) per-report and wrapping that DEK with each recipient's public key.
 * **Integrity & Authenticity (SR2):** Report contents must be tamper-evident and attributable to a signer. Achieved with an Ed25519 digital signature over the canonicalized `(report || metadata)` pair.
 * **Ordering / Missing / Duplicates / Fork detection (SR3, SR4):** Each sender (or client/node) maintains a per-sender monotonic `node_sequence_number` and `prev_envelope_hash` forming a lightweight per-sender hash chain, where peers validate sequence/prev-hash to detect missing, duplicate or out-of-order messages and to detect equivocation. This is used along with Merkle Roots computation to ensure global consistency during synchronization (described in section [5.2](#52-security-protocol-description-synchronization-integrity-and-consistency)).
 * **Performance and security of tools:** Use of well-supported, standard algorithms available in Java’s crypto stack (AES-GCM, RSA-OAEP, Ed25519) to avoid implementing low-level crypto, as required.
 
-##### High-level message structure (envelope)
+##### **High-level message structure (envelope)**
 
 An envelope contains three top-level sections:
 
@@ -154,13 +154,13 @@ An envelope contains three top-level sections:
 }
 ```
 
-##### Canonicalization and signing
+##### **Canonicalization and signing**
 
 Signatures and hash chains require a deterministic byte representation. We canonicalize JSON before hashing/signing: keys are deterministically ordered and objects serialized to UTF-8. The signature input is the concatenation of canonical `report` bytes and canonical `metadata` bytes.
 
 > Rationale: Without deterministic canonicalization two nodes serializing the same logical JSON may produce different bytes and signatures/hashes will fail to verify.
 
-##### Algorithms, parameters and choices
+##### **Algorithms, parameters and choices**
 
 * **Symmetric encryption (AEAD):** AES-256-GCM (12-byte nonce, 128-bit tag). Metadata is used as Associated Authenticated Data (AAD) to bind metadata to content integrity.
 * **Key wrapping:** RSA-OAEP with SHA-256 and MGF1 (`"RSA/ECB/OAEPWithSHA-256AndMGF1Padding"`) to encrypt per-recipient DEKs.
@@ -170,7 +170,7 @@ Signatures and hash chains require a deterministic byte representation. We canon
 * **Encoding:** In our current implementation hash fields are encoded as hexadecimal strings via `HashUtils.bytesToHex(...)`, while the remaining (keys, signatures) are base64url encoded.
 * **Key separation:** Each client node and the server have two key pairs: an RSA key pair for confidentiality (DEK wrapping) and an Ed25519 pair for signing. 
 
-##### Why these choices are effective
+##### **Why these choices are effective**
 
 * AEAD provides confidentiality and integrity in one primitive, and AES-GCM is widely available and efficient for this **(add the source)**. Binding metadata as AAD ensures metadata or ciphertext cannot be changed without detection. This is because GCM produces an authentication tag that covers both the ciphertext and the AAD, so any modification to either will result in decryption failure as the tag will not match.
 * RSA-OAEP with SHA-256 is a efficient way to wrap symmetric keys for a set of recipients, as RSA is performant for small data like keys. **(add the source)**
@@ -180,9 +180,9 @@ GCM runs CTR internally which requires a 16-byte counter. The IV provides 12 of 
 * Signing and encryption address different security properties. Using separate keys avoids cross-protocol attacks and follows standard cryptographic practice (e.g., TLS, PGP, Signal), ensuring that compromising one key does not compromise the other security properties, which increases overall system robustness. **(add the source)**
 * The per-sender sequence number plus the prev-hash is simple and efficient to detect missing, duplicate or forked sequences in a synced peer network where a full consensus protocol would be overkill.
 
-#### 5.1.2 Implementation & Technologies
+#### **5.1.2 Implementation & Technologies**
 
-##### API summary
+##### **API summary**
 
 * `protect(report, metadata, recipientPubKeys, signerPrivKey)` - outputs the Envelope  
   Produces an envelope with encrypted report payload and a set of wrapped DEKs for recipients.
@@ -193,7 +193,7 @@ GCM runs CTR internally which requires a 16-byte counter. The IV provides 12 of 
 * `unprotect(envelope, recipientPrivKey, recipientNodeId, senderPubKey)` - outputs the Report  
   Unwraps DEK for `recipientNodeId`, decrypts AES-GCM payload (AAD = metadata) and verifies Ed25519 signature. Throws `SecurityException` on AEAD failure or signature failure.
 
-##### Implementation details
+##### **Implementation details**
 
 * **Canonical JSON:** The code calls `canonicalJson(...)` on `JsonObject`s and then uses the resulting bytes as the canonical representation for signatures and AEAD AAD. 
 * **Signing:** `signDataHex(payload, signerPrivKey)` signs `(report || metadata)` using `Signature.getInstance("Ed25519")` and produces a hex string.
@@ -400,35 +400,39 @@ Hash operations:
 - Library: `java.security.MessageDigest`
 
 
-### 5.3 Security Challenge
+### **5.3 Security Challenge**
 
 The fact that the reports are anonymous, could easily lead to attacks where users flood the network with fake reports, trying to harden the system and make it unusable for legitimate users. With this in mind, we decided that Challenge B would be the most interesting one to tackle, as it requires us to design a solution that resists such attacks. 
 
-#### 5.3.1 Solution Design
+#### **5.3.1 Solution Design**
 
 **(_Describe the new requirements introduced in the security challenge and how they impacted your original design._)
 (_Explain how your team redesigned or extended the solution to meet the security challenge, including key distribution and other security measures._)**
 
-This security challenge required us to introduce a new entity in the system: the monitor server. This server is responsible for observing network activity and detecting flooding attacks from misbehaving nodes. As it is possible to observe in figure **[network-architecture-diagram]**, we leveraged the fact that we needed a gateway from each client network to the central server, and vice versa, to place the monitor server in between them. This way, all client-server communications pass through the monitor, allowing it to effectively monitor traffic and identify potential flooding attacks.
+This security challenge required us to introduce a new entity in the system: the monitor server. This server is responsible for observing network activity and detecting flooding attacks from misbehaving nodes. As it is possible to observe in the network architecture diagram in [5.5.1](#551-network-and-machine-setup), we leveraged the fact that we needed a gateway from each client network to the central server, and vice versa, to place the monitor server in between them. This way, all client-server communications pass through the monitor, allowing it to effectively monitor traffic and identify potential flooding attacks.
 
 We also leveraged the fact that each client keeps an in memory strucure (buffer, or more simple, a list with the unsynced reports), and that it uses it to decide when to send Sync requests to the server (fixed-size messages), when the buffer reaches a certain size. This means that a misbehaving client that wants to flood the network with fake reports, would have to send a lot of Sync requests to the server in a short period of time, as each Sync request can only carry a limited number of reports.
 
-#### 5.3.2 Implementation & Technologies
+#### **5.3.2 Implementation & Technologies**
 
 This monitor server was implemented using **Python**.
 It listens for incoming connections from client nodes to the central server, using the packet size to detect Sync requests. With this detection, it is able to count how many Sync requests each client sends in a given time window (e.g., per minute). If a client exceeds a predefined threshold of Sync requests within that time window, the monitor server flags the client as misbehaving and blocks its further communications to the central server. This is implemented by simply dropping any packets from the misbehaving client, thus not forwarding them to the central server. This block is not permanent, as after a certain timeout period, the monitor server will unblock the client and allow it to communicate with the central server again.
 
 As the monitor server is only able to detect that a client is flooding the network with when the first Sync that exceeds the threshold is received, it allways blocks the client from that point on. Thus, when the server then request all the buffers from all connected clients, it is configured to timeout when a client is taking too long to respond, and then just ignores that client for that synchronization round. On the client side, when responding with the requested buffer, after the block, this message is dropped and the client does not receive any response from the server, so it is also configured to timeout after a certain period of time waiting for the server response. If this timeout is reached, the client is assumed compromised and drops all the reports in its buffer, rolling back its state to the last successful synchronization.
 
-### 5.4 Architecture
+### **5.4 Storage**
 
-(_Include a structural diagram, in UML or other standard notation._)
-(_Include a architecture diagram)
+![](../resources/img/A53-DeathNode-DB.png)
 
-### 5.5 Infrastructure
+The picture above illustrates the database schema used in our implementation, in both client nodes and database server. The database is used to store metadata about reports, nodes, and synchronization state, while we use the filesystem to store the actual envelope files containing the encrypted reports.
 
+Private keys are stored using **Java KeyStore (JKS)** on each node. JKS provides encrypted at-rest storage for cryptographic keys and integrates natively with Java’s security APIs. Both the keystore and individual key entries are password-protected. For simplicity in this project, the same password (`"demonstration"`) is used for both, although distinct passwords would be recommended in a production deployment.
 
-#### 5.5.1 Network and Machine Setup
+### **5.5 Infrastructure**
+
+#### **5.5.1 Network and Machine Setup**
+
+![](../resources/img/Network_Diagram.png)
 
 6.2. Firewall rules
 6.3. Justification of the chosen infrastructure
@@ -437,26 +441,183 @@ As the monitor server is only able to detect that a client is flooding the netwo
 
 (_Justify the choice of technologies for each server._)
 
-#### 5.5.2 Communication Security
+#### **5.5.2 Communication Security**
 
-(_Discuss how server communications were secured, including the secure channel solutions implemented and any challenges encountered._)
+All network communications in the DeathNode system are protected using **Transport Layer Security (TLS 1.3)** with **mutual authentication (mTLS)**, ensuring that both parties in every connection verify each other's identity before exchanging data. This provides confidentiality, integrity and authenticity at the transport layer, complementing the end-to-end security guarantees of the secure document format.
 
-(_Explain what keys exist at the start and how are they distributed?_)
+##### **Two-Level Key Architecture**
 
-## 6. Conclusion
+The security architecture distinguishes between two independent key layers:
 
-(_State the main achievements of your work._)
+1. **User-level cryptographic keys** (detailed in Section [5.1.1](#511-solution-design)):
+   - RSA-2048 key pairs for report encryption (wrapping content encryption keys)
+   - Ed25519 key pairs for digital signatures (signing reports and commitments)
 
-(_Describe which requirements were satisfied, partially satisfied, or not satisfied; with a brief justification for each one._)
+2. **Transport-level TLS keys** (this section):
+   - RSA-2048 key pairs for TLS server/client authentication
+   - X.509 certificates signed by a Certificate Authority
 
-(_Identify possible enhancements in the future._)
-Hash mercke root with previous merkle root
-Error handling
-When detected local tampering, oprion to remove corrupted files
+This separation follows the cryptographic principle of **key separation**: using distinct keys for different purposes prevents cross-protocol attacks and limits the impact of key compromise. A compromised TLS key does not grant access to encrypted report contents, and vice versa.
 
-(_Offer a concluding statement, emphasizing the value of the project experience._)
+##### **Public Key Infrastructure (PKI)**
 
-## 7. Bibliography
+The system employs a **Certificate Authority (CA)** to manage trust relationships:
+
+- **CA certificate** (`ca-cert.pem`): Self-signed root certificate distributed to all entities at deployment time
+- **CA private key** (`ca-key.pem`): Kept secure and never distributed, used only to sign entity certificates
+- **Entity certificates**: Each node, server and database receives a unique certificate signed by the CA
+
+All certificates include **Subject Alternative Names (SANs)** with both DNS names and IP addresses to support flexible deployment scenarios (localhost, Docker containers, VMs).
+
+##### **Communication Channel 1: gRPC (Client ↔ Server)**
+
+The bidirectional gRPC streaming connection between clients and the central server is secured using **mutual TLS**:
+
+**Server configuration** (`application.yml`):
+```yaml
+grpc:
+  server:
+    security:
+      enabled: true
+      certificate-chain: tls-cert.pem    # Server identity
+      private-key: tls-key.pem           # Server private key (PKCS#1 PEM)
+      trust-cert-collection: ca-cert.pem # Trusted CA for client certs
+      client-auth: REQUIRE                # Enforce mutual TLS
+```
+
+The server presents its certificate to clients and **requires** clients to present valid certificates signed by the trusted CA.
+
+**Client configuration** (`GrpcConnectionManager.java`):
+```java
+SslContext sslContext = GrpcSslContexts.forClient()
+    .trustManager(ca-cert.pem)              // Trust server cert
+    .keyManager(tls-cert.pem, tls-key.pem)  // Client identity
+    .build();
+```
+
+Clients verify the server's certificate and present their own for authentication. The gRPC-Netty library handles TLS negotiation and certificate validation automatically.
+
+**Key format**: gRPC-Netty accepts **PKCS#1 PEM** format for private keys, which is the standard OpenSSL output format.
+
+##### **Communication Channel 2: JDBC (Server ↔ Database)**
+
+The connection between the Spring Boot server and the PostgreSQL database is also secured with mutual TLS, but this required a **separate client certificate** for the server when acting as a database client.
+
+> Why a separate certificate?
+
+Unlike the gRPC scenario where the server acts as a **TLS server**, when connecting to PostgreSQL, the Spring Boot application acts as a **TLS client**. PostgreSQL's authentication model requires:
+- The client certificate's **Common Name (CN)** must match the database username (`dn_admin`)
+- The certificate represents the **client's identity**, not the server's
+
+Reusing the gRPC server certificate would violate this requirement (its CN is `deathnode-server`, not `dn_admin`) and mix two distinct trust domains.
+
+PostgreSQL server configuration (`pg_hba.conf`):
+```
+hostssl deathnode dn_admin 0.0.0.0/0 cert clientcert=verify-full
+```
+
+This enforces that:
+- Only SSL connections are allowed
+- The client must present a valid certificate
+- The certificate must be signed by the trusted CA
+- The CN must match the connecting user
+
+Spring Boot JDBC configuration (`application.yml`):
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://...?ssl=true&sslmode=verify-full
+         &sslrootcert=db-client/ca-cert.pem
+         &sslcert=db-client/client-cert.pem
+         &sslkey=db-client/client-key.pk8
+```
+
+**Critical requirement**: The PostgreSQL JDBC driver requires private keys in **PKCS#8 DER format** (`.pk8` files), not the standard PEM format. This is a driver-specific requirement not present in other PostgreSQL clients.
+
+##### **Key Generation and Distribution Process**
+
+All cryptographic material is generated using an automated script (`generate-all-keys.sh`) that:
+
+1. **Generates the CA** (one-time operation):
+   - Creates a 4096-bit RSA root key pair
+   - Generates a self-signed X.509 certificate valid for one year
+   - Sets restrictive permissions (private key: 600, certificate: 644)
+
+2. **For each client node**:
+   - Generates Ed25519 key pair (user-level signing) in PEM and DER formats
+   - Generates RSA-2048 key pair (user-level encryption) in PEM and DER formats
+   - Generates RSA-2048 key pair (transport-level TLS)
+   - Creates Certificate Signing Request (CSR) with node-specific CN
+   - Signs CSR with CA to produce TLS certificate with appropriate SANs
+   - Converts keys to PKCS#12 format and imports into Java Keystore (JKS) for user-level keys
+   - Copies CA certificate to trust store
+
+3. **For the server**:
+   - Generates user-level key pairs (Ed25519 + RSA-2048)
+   - Generates gRPC server TLS certificate with CN=`deathnode-server` and SANs for all deployment scenarios
+   - **Additionally** generates a separate PostgreSQL client certificate with CN=`dn_admin`
+   - Converts the PostgreSQL client private key to **PKCS#8 DER format** (`.pk8`) for JDBC compatibility
+   - Creates Java Keystore for user-level keys
+
+4. **For the database**:
+   - Generates RSA-2048 key pair for TLS server authentication
+   - Creates certificate with CN=`deathnode-database`
+   - Configures permissions (PostgreSQL requires key file to be owned by UID 999 with mode 600)
+
+**Key distribution**:
+- **CA certificate**: Distributed to all entities (public, can be freely shared)
+- **CA private key**: Never distributed, it is supposed to be kept secure on the deployment machine
+- **Entity private keys**: Stored locally on each node, never transmitted (Java Keystore files)
+- **Entity certificates**: Public, stored alongside private keys but can be shared
+- **Public keys** (user-level): Stored in database tables (`nodes.sign_pub_key`, `nodes.enc_pub_key`) and distributed manually at deployment time
+
+At deployment time:
+1. Run `generate-all-keys.sh ca` to create the root CA
+2. Run `generate-all-keys.sh client nodeA` for each client
+3. Run `generate-all-keys.sh server` for the central server
+4. Run `generate-all-keys.sh database` for PostgreSQL
+5. Distribute CA certificate to all entities
+6. Manually insert user-level public keys into database tables (one-time setup)
+
+##### **Challenges Encountered**
+
+Several technical challenges arose during implementation:
+
+1. **Key format incompatibility**: PostgreSQL JDBC requires PKCS#8 DER format while gRPC accepts PKCS#1 PEM. Solution: generate both formats during key creation.
+
+2. **Certificate role separation**: Initially attempted to reuse server certificates for client authentication, which violated PKI principles.  
+Solution: generate dedicated client certificates with appropriate CN values.
+
+3. **Java Keystore creation**: Importing Ed25519 and RSA keys into JKS format required intermediate PKCS#12 conversion with temporary self-signed certificates.  
+Solution: automated the conversion pipeline in the key generation script.
+
+4. **PostgreSQL file permissions**: Docker containers run PostgreSQL as UID 999, requiring special ownership and permission handling.  
+Solution: use Docker volumes with explicit `chown` operations during container initialization.
+
+5. **SAN configuration**: Certificates needed to support multiple deployment scenarios (localhost, Docker DNS, static IPs).  
+Solution: include comprehensive SANs during certificate creation with `subjectAltName` extensions.
+
+## **6. Conclusion**
+
+The DeathNode project successfully implemented a secure, distributed reporting system that protects participant anonymity while maintaining strong integrity and consistency guarantees. Through the integration of end-to-end encryption, digital signatures, hash chains, Merkle tree commitments, and mutual TLS authentication, we created a defense-in-depth architecture that addresses all security requirements of the challenge scenario.
+
+### Requirements Satisfaction
+
+All four security requirements were **fully satisfied**, as detailed in the previous sections. The secure document format (Section 5.1) provides confidentiality and individual integrity through AES-GCM encryption and Ed25519 signatures. The synchronization protocol (Section 5.2) ensures batch integrity and consistency through hash chains, Merkle trees, and cryptographic block chaining. The security challenge (Section 5.3) was addressed with a vigilant monitor server providing intrusion detection and database integrity verification. The infrastructure requirement (Section 5.5) was met with complete VM deployment, network segmentation and mutual TLS for all communications.
+
+### Future Enhancements
+
+While the system is cryptographically sound, several improvements could enhance robustness:
+
+1. **Enhanced error recovery**: Fix current recovery bugs and implement more sophisticated recovery mechanisms beyond timeout-based cleanup, such as partial state synchronization or incremental retry strategies.
+
+2. **At rest tampering management**: Now that users can detect local storage tampering, implement ways of giving the user options on how to proceed (e.g., quarantine, re-sync from server, etc.).
+
+3. **Stronger block chaining**: Instead of directly including the `previous block root` in the `SyncResult`, compute `hash(prev_block_root)` and include that. This would require only minor changes to client-side verification logic.
+
+4. **Dynamic membership**: Extend the protocol to support nodes joining or leaving the network after deployment, requiring key distribution mechanisms and membership change consensus.
+
+## **7. Bibliography**
 
 (_Present bibliographic references, with clickable links. Always include at least the authors, title, "where published", and year._)
 
