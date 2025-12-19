@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Main client service for report management and synchronization.
  */
 public class ClientService {
-    
+
     private final DatabaseService db;
     private final PersistentSyncClient syncClient;
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
@@ -35,7 +35,7 @@ public class ClientService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize lastNodeSequenceNumber", e);
         }
-        
+
         // connect to server immediately (without starting sync)
         syncClient.connect();
         startPendingReportsMonitor();
@@ -66,8 +66,11 @@ public class ClientService {
         System.out.print("Reports to create: ");
         int n = sc.nextInt();
 
-        record Report(String suspect, String description, String location) {};
-        Type listType = new TypeToken<List<Report>>(){}.getType();
+        record Report(String suspect, String description, String location) {
+        }
+        ;
+        Type listType = new TypeToken<List<Report>>() {
+        }.getType();
 
         List<Report> reports;
         try (FileReader reader = new FileReader("reports.json")) {
@@ -85,10 +88,16 @@ public class ClientService {
 
     /**
      * Create a report programmatically.
-     * 
+     *
      * @return Envelope hash of the created report
      */
     public String createReport(String suspect, String description, String location) throws Exception {
+        if (suspect == null || suspect.length() > 32
+                || description == null || description.length() > 512
+                || location == null || location.length() > 64) {
+            return null;
+        }
+
         System.out.println("Creating report: suspect=" + suspect + ", location=" + location);
 
         // 1. Build Report object
@@ -172,12 +181,12 @@ public class ClientService {
             return;
         }
 
-        System.out.println("Triggering sync of " + pending + " pending reports");
-        System.out.println("Initiating sync round with " + pending + " pending reports...");
-        
+        //System.out.println("Triggering sync of " + pending + " pending reports");
+        //System.out.println("Initiating sync round with " + pending + " pending reports...");
+
         syncClient.triggerSync();
     }
-    
+
     public void shutdown() {
         syncClient.shutdown();
     }
