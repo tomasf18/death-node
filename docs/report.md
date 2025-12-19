@@ -209,11 +209,196 @@ GCM runs CTR internally which requires a 16-byte counter. The IV provides 12 of 
     It is a fast structural validation intended to detect malformed or obviously invalid envelopes before attempting expensive crypto ops.
 
 
-### 5.2 Security Protocol description: synchronization, integrity and consistency
+### **5.2 Security Protocol: Synchronization, Integrity and Consistency**
 
-#### 5.2.1 Solution Design
+This section describes the synchronization protocol: how nodes submit reports, how the system synchronizes them, and how it detects missing, duplicated or out-of-order reports (SR3) and forged or diverging histories (SR4). The text explains the data that travels between parties, the commitments that nodes make, the checks performed by the server and by clients, and the response to any inconsistency. 
 
-#### 5.2.2 Implementation & Technologies
+
+#### **5.2.1 Solution Design**
+
+##### **Report submission -  local persistence and per-sender ordering**
+
+Each report is produced by a node and information of that report is immediately stored on disk (filesystem) at that node in **encrypted form**. The file is the canonical encrypted artifact for that report and contains only ciphertext and the minimal metadata required to locate and verify it later.
+
+In addition to the encrypted file, each node maintains an append-only sequence for the reports it publishes: every new report includes a cryptographic link to (or the hash of) the previous report published by the same node. This per-sender link provides an immutable local ordering for that publisher.
+
+When the file is created, the node also updates the database with relevant metadata (e.g., the file path), and appends the new report to an in-memory buffer (a list of file paths). This buffer accumulates all **unsynced** reports until synchronization is triggered.
+
+
+##### **Clear outer metadata and AEAD binding**
+
+Each report contains an outer clear header that contains only **non-sensitive routing and ordering fields** (for example: a timestamp for coarse global sorting, the per-sender sequence number and the per-sender link to the previous report).
+
+This outer metadata is kept in cleartext so the server can perform global ordering without accessing report contents. However, and as referenced in [5.1.1](#511-solution-design), the metadata is **bound to the encrypted payload** using authenticated encryption with associated data (AEAD, via AES-GCM). So, any modification to the metadata will cause decryption to fail at receiving nodes.
+
+End-to-end authorship and integrity are guaranteed by a digital signature placed **inside** the encrypted payload (see [5.1.1](#511-solution-design)). 
+
+##### **Merkle commitments for buffers**
+
+When a synchronization round is initiated, each node computes a **Merkle tree** over the buffered encrypted files and derives a Merkle root. The node signs this Merkle root with its signing key and persists the signed root.
+
+The signed root is the node’s compact, tamper-evident **commitment** to the exact set and ordering of the buffered items at that moment. This lets the node prove later which exact envelopes it intended to publish in that sync round.
+
+##### **Synchronization procedure (message flow)**
+
+1. Synchronization is initiated either periodically or on demand.  
+2. When a node needs to sync with the server, it sends a **`Hello`** (with *`sync flag`* set) request.  
+3. The server acknowledges the creation of a new sync round and requests all the contents present in all clients’ buffers (**`RequestBuffer`**).  
+4. Each client then sends to the server a **`BufferUpload`** message containing:  
+   - Up to **N** buffered envelopes (N is configurable),  
+   - The **Merkle root** of the buffer,  
+   - The node's **signature** on that Merkle root.  
+5. The server receives the buffers from all nodes and **verifies each node's buffer**:
+   - Verify the node's signature on the Merkle root.
+   - Recompute the Merkle root from the received envelopes and ensure it matches the signed root -  this guarantees the set of files the server received is exactly the set the node committed to (prevents in-transit tampering or lost contents).
+   - Verify per-sender **hash chain continuity**: ensure the first report sent by each node links correctly to the last known synced report from that node, and that all subsequent reports link correctly to their predecessors (this detects missing, duplicated or out-of-order reports per sender).  
+   **Note:** The hash chain *per se* does not detect if the last envelope (in each nodes' buffer or in the `SyncResult` from the server) is missing, as this would require knowledge of future envelopes. This is detected instead by the Merkle root commitment, which binds the entire set of envelopes. So they work together to provide full integrity guarantees.
+6. If all buffers are valid, the server sorts all received envelopes **globally** by their metadata timestamp, producing a single, totally ordered list of all reports from all nodes.
+7. The server constructs a new **block** that commits to this global ordering:
+   - Compute the Merkle root of the ordered envelopes,
+   - Link to the previous block’s root,
+   - Sign the new block root,
+   - Increment the block number.
+8. The server then broadcasts a **`SyncResult`** message to all clients containing:
+   - The globally ordered list of envelopes,
+   - The new block root, signed block root, block number, and previous block root,
+   - The signed Merkle roots that it received from each node (for cross-verification).
+9. Each client receives the `SyncResult` and performs a **multi-stage verification pipeline** (described next, in [Client verification: multi-stage pipeline](#client-verification-multi-stage-pipeline-on-receiving-syncresult)).
+
+> Note: each step above corresponds to concrete protocol messages (`Hello`, `RequestBuffer`, `BufferUpload`, `SyncResult`, which will be referenced in [5.2.2](#522-implementation--technologies)) and concrete checks the server executes on received data.
+
+##### **Client verification: multi-stage pipeline (on receiving `SyncResult`)**
+
+Upon receiving a `SyncResult`, each client performs a **multi-stage verification pipeline**. Only after all six stages pass does the client accept the sync result. Any failure triggers immediate rejection and an error report to the server, followed by cleanup of unsynced data.
+
+**Stage 1: Server Block Signature**
+- Verify `signed_block_root` using the server's Ed25519 public key.  
+- **Protects against:** Server impersonation, forged sync results.
+
+**Stage 2: Block Chain Continuity**
+- Compare the `block number` and `previous block root` with locally stored last block.  
+- Ensure `block number = last block number + 1`.  
+- Ensure `previous block root` matches last known `block root`.  
+- **Protects against:** Server equivocation, forked histories (SR4).
+
+**Stage 3: Block Merkle Root**
+- Recompute Merkle root from received ordered envelopes.  
+- Verify it matches `block root`.  
+- **Protects against:** Server reordering, omitting, or modifying envelopes (SR3, SR4).
+
+**Stage 4: Per-Node Buffer Signatures**
+- For each node that participated in the round:
+  - Verify the signature on the node's `signed buffer root` using that node's public key.  
+- **Protects against:** Server fabricating buffers on behalf of nodes (SR4).
+
+**Stage 5: Per-Sender Hash Chains**
+- For each sender (nodeA, nodeB, etc.), extract their envelopes from the ordered list and verify:
+  - The first envelope's `previous envelope hash` matches the last known synced envelope hash for that sender,
+  - Each subsequent envelope links correctly to its predecessor,
+  - Sequence numbers increment by 1.  
+- **Protects against:** Missing, duplicated or reordered reports per sender (SR2, SR3).
+
+**Stage 6: Individual Envelope Processing**
+- For each envelope:
+  - Store to disk with deterministic filename (hash-based),
+  - Decrypt and verify signature,
+  - Update local database.
+- **Protects against:** Corrupted files, forged reports (SR1, SR2).
+
+Only if all verification stages pass does the client accept the sync result, store the new envelopes, and update its local state. Any failure triggers immediate rejection, error reporting to the server.
+
+
+##### **Merkle Tree Commitments (SR3)**
+
+Why this is used (SR3):
+- **Batch integrity:** The Merkle root is a compact (32-byte) cryptographic commitment to the **exact set and order** of envelopes in the buffer.
+- **Tamper detection:** If an attacker modifies, adds, or removes even one envelope in transit, the recomputed Merkle root will differ from the signed root.
+- **Non-repudiation:** Because the sender signed the root before transmission, they cannot later deny having sent that specific set of envelopes.
+
+This technique efficiently detects **missing or tampered reports at the batch level** before individual processing begins.
+
+This creates a **server-maintained blockchain** where each block:
+- Commits to a specific global ordering of reports,
+- References the previous block cryptographically,
+- Is signed by the server.
+
+How this satisfies SR4 (Consistency):
+- **Fork detection:** If the server attempts to produce two different orderings for the same sync round (equivocation), clients will detect mismatching block roots.
+- **History continuity:** The `previous block root` chain ensures that past synchronization rounds cannot be retroactively altered without breaking the chain.
+- **Cross-node verification:** Clients verify that other nodes' signed Merkle roots match what the server claims to have received, detecting server-side tampering with buffer contents.
+
+
+##### **Data-at-Rest Integrity Verification (SR2, SR4)**
+
+If a client’s local storage is compromised (for example, encrypted report files are altered directly on disk), the system must be able to detect such tampering.   
+
+Because continuously re-verifying all stored reports would be computationally expensive, these checks are performed **on-demand**, whenever a report is accessed or audited. Each client can verify that locally stored data at rest has not been modified. The `list-reports` command performs integrity checks before decrypting and listing reports. Any tampering is detected by the `unprotect()` tool: AES-GCM authentication will fail if ciphertext or AAD were changed, while the Ed25519 signature verification will fail if plaintext was altered. And this error is immediately reported to the user.
+
+This provides defense against:
+  - Filesystem corruption,
+  - Malicious local process modifications,
+  - Storage media bit-flips.
+
+
+##### **Security Properties Summary**
+
+| Requirement | Mechanism | Enforcement Point |
+|------------|-----------|------------------|
+| **SR1: Confidentiality** | End-to-end AES-GCM encryption | Only authorized nodes can decrypt |
+| **SR2: Integrity (individual)** | End-to-end AES-GCM and Ed25519 signatures inside ciphertext | Client verification upon decryption |
+| **SR3: Integrity (batch)** | Per-sender hash chains + Merkle trees | Server and client verification |
+| **SR4: Consistency** | Signed block roots + block chaining | Client multi-stage verification pipeline |
+
+
+#### **5.2.2 Implementation & Technologies**
+
+##### **Protocol Definition**
+
+The synchronization protocol is defined using **Protocol Buffers 3** (`.proto` files).
+
+Key message types:
+- `Hello`: Connection establishment and sync initiation
+- `BufferUpload`: Client submits envelopes + signed Merkle root
+- `RequestBuffer`: Server requests buffers from all clients
+- `SyncResult`: Server distributes globally ordered envelopes + block commitment
+- `SignedBufferRoot`: Per-node buffer commitment metadata
+- `Error`: Error reporting between parties
+
+Communication uses **gRPC bidirectional streaming** over HTTP/2.
+
+##### **Client Implementation**
+
+Main technology stack:
+- Java 21
+- SQLite 3 - Lightweight, file-based relational database
+- gRPC-Java - High-performance, open-source RPC framework that allows clients and servers to communicate transparently
+- Gson - JSON parsing for envelope processing
+
+##### **Server Implementation**
+
+Main technology stack:
+- Java 21
+- Spring Boot 3 - Application framework with dependency injection, transaction management
+- PostgreSQL 18 - Relational database for persistent storage
+- JPA/Hibernate - ORM for database access
+- gRPC Spring Boot Starter - Integrates gRPC server with Spring lifecycle
+- Gson
+
+##### **Cryptographic Operations**
+
+Merkle tree implementation:
+- Binary tree construction using SHA-256
+- Leaf nodes: `H(envelope_bytes)`
+- Internal nodes: `H(left_child || right_child)`
+- Padding: If odd number of leaves, duplicate last leaf
+- Root: 32-byte hash commitment
+
+Hash operations:
+- Algorithm: SHA-256
+- Output: 32 bytes (256 bits)
+- Used for: Envelope hashes, Merkle tree nodes, block roots, hash chains
+- Library: `java.security.MessageDigest`
+
 
 ### 5.3 Security Challenge
 
@@ -265,6 +450,9 @@ As the monitor server is only able to detect that a client is flooding the netwo
 (_Describe which requirements were satisfied, partially satisfied, or not satisfied; with a brief justification for each one._)
 
 (_Identify possible enhancements in the future._)
+Hash mercke root with previous merkle root
+Error handling
+When detected local tampering, oprion to remove corrupted files
 
 (_Offer a concluding statement, emphasizing the value of the project experience._)
 
