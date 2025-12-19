@@ -11,11 +11,17 @@ public class Config {
     public static final int SERVER_PORT = 9090;
     
     // Sync configuration
+    public static final int BUFFER_SIZE = 25;
     public static final int BUFFER_THRESHOLD_TO_SYNC = 2; // max buffered reports before triggering sync
     public static final int SYNC_TIMEOUT_SECONDS = 10;   
-    public static final int MAX_ENVELOPES_TO_SEND_PER_SYNC = 5; 
-    public static final int INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS = 10; // seconds between checking for pending reports
-    
+    public static final int MAX_ENVELOPES_TO_SEND_PER_SYNC = BUFFER_SIZE;
+    public static final int INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS = 7; // seconds between checking for pending reports
+
+    // Report content sizes
+    public static final int MAX_SUBJECT_LENGTH = 32;
+    public static final int MAX_DESCRIPTION_LENGTH = 1024;
+    public static final int MAX_LOCATION_LENGTH = 32;
+
     // Keystore configuration
     public static final String KEYSTORE_PASSWORD = "demonstration";  // just for the project demo
     public static final String ED_PRIVATE_KEY_ALIAS = "sign-key";    // alias under which Ed25519 private key is stored

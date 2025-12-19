@@ -302,7 +302,9 @@ public class PersistentSyncClient {
             cancelTimeoutMonitoring("Server buffer request received in time");
 
             String roundId = request.getRoundId();
-            System.out.println("Server requested buffer for round: " + roundId + " - sending " + pendingEnvelopes.size() + " envelopes");
+            //System.out.println("Server requested buffer for round: " + roundId + " - sending " + pendingEnvelopes.size() + " envelopes");
+            System.out.println("Server requested buffer for round: " + roundId);
+
 
             try {
                 // Build BufferUpload

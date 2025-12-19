@@ -92,9 +92,14 @@ public class ClientService {
      * @return Envelope hash of the created report
      */
     public String createReport(String suspect, String description, String location) throws Exception {
-        if (suspect == null || suspect.length() > 32
-                || description == null || description.length() > 512
-                || location == null || location.length() > 64) {
+
+        if (!checkParams(suspect, description, location)) {
+            System.out.println("Invalid arguments. Won't create report");
+            return null;
+        }
+
+        if (getPendingReportsCount() >= Config.BUFFER_SIZE) {
+            System.out.println("[!] Buffer full. Wait for next sync.");
             return null;
         }
 
@@ -163,10 +168,10 @@ public class ClientService {
         syncClient.addPendingEnvelope(written.toString());
 
         // 9. Auto-sync if threshold reached
-        if (syncClient.getPendingCount() >= Config.BUFFER_THRESHOLD_TO_SYNC) {
-            System.out.println("Buffer threshold reached (" + Config.BUFFER_THRESHOLD_TO_SYNC + ") - triggering sync");
-            syncReports();
-        }
+//        if (syncClient.getPendingCount() >= Config.BUFFER_THRESHOLD_TO_SYNC) {
+//            System.out.println("Buffer threshold reached (" + Config.BUFFER_THRESHOLD_TO_SYNC + ") - triggering sync");
+//            syncReports();
+//        }
 
         return envelopeHash;
     }
@@ -313,5 +318,20 @@ public class ClientService {
     public void resetDatabase() throws Exception {
         db.resetDatabase();
         System.out.println("Local database reset complete.");
+    }
+
+    private boolean checkParams(String... strings) {
+        try {
+            for (String string : strings) {
+                if (string == null || string.trim().isEmpty()) {
+                    return false;
+                }
+            }
+            return strings[0].length() <= Config.MAX_SUBJECT_LENGTH &&
+                    strings[1].length() <= Config.MAX_DESCRIPTION_LENGTH &&
+                    strings[2].length() <= Config.MAX_LOCATION_LENGTH;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

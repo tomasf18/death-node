@@ -15,7 +15,7 @@ import subprocess
 # Configuration
 TIME_WINDOW = 30  # seconds
 BYTE_THRESHOLD = 20000  # bytes per TIME_WINDOW
-MAX_REQUESTS = 1 # max allowed sync requests per TIME_WINDOW
+MAX_REQUESTS = 2 # max allowed sync requests per TIME_WINDOW
 BLOCK_DURATION = 30  # seconds to block
 INTERFACES = ['eth1','eth2']
 
@@ -112,13 +112,13 @@ def calculate_stats():
             src_ip = packet_data['src_ip']
             stats[src_ip]['packets'] += 1
             stats[src_ip]['bytes'] += packet_data['bytes']
-            if packet_data['bytes'] > 110 and packet_data['bytes'] < 140:
+            if packet_data['bytes'] > 110 and packet_data['bytes'] < 130:
                 stats[src_ip]['sync_requests'] += 1
 
 
         # Check for violations and collect IPs to block
         for src_ip, data in stats.items():
-            if data['bytes'] > BYTE_THRESHOLD or data['sync_requests'] > MAX_REQUESTS:
+            if data['sync_requests'] == MAX_REQUESTS:
                 if src_ip not in blocked_ips and src_ip.endswith("100"):
                     ips_to_block.append(src_ip)
 
@@ -160,7 +160,7 @@ def display_stats():
         print("=" * 95)
         print(f"  DeathNode Monitor (Threshold: {BYTE_THRESHOLD} bytes/{TIME_WINDOW}s)")
         print("=" * 95)
-        print(f"{'Source IP':<20} {'Packets':<12} {'Bytes':<15} {'Sync':<12} {'Formatted':<12} {'Status':<15}")
+        print(f"{'Source IP':<20} {'Packets':<12} {'Bytes':<12} {'Sync':<12} {'Formatted':<12} {'Status':<15}")
         print("-" * 95)
 
         # Get current stats
@@ -192,7 +192,7 @@ def display_stats():
                     if src_ip in blocked_ips:
                         time_left = int(blocked_ips[src_ip] - time.time())
                         status = f"[-] BLOCKED ({time_left}s)"
-                    elif bytes_total > BYTE_THRESHOLD * 0.8 or sync_requests == MAX_REQUESTS:
+                    elif bytes_total > BYTE_THRESHOLD * 0.8 or sync_requests == MAX_REQUESTS - 1:
                         status = "[!] WARNING"
                     else:
                         status = "[+] OK"
