@@ -115,10 +115,10 @@ An envelope contains three top-level sections:
 
   "key_encrypted": {
     "encryption_algorithm": "RSA-OAEP-SHA256",
-    “key_per_node”: [
-        {“node”: “self”, "encrypted_key": "b64url(...)"}, // -> because this node still needs to decrypt it
-        {“node”: “nodeB”, "encrypted_key": "b64url(...)"},
-        {“node”: “nodeC”, "encrypted_key": "b64url(...)"},
+    "key_per_node": [
+        {"node": "self", "encrypted_key": "b64url(...)"},
+        {"node": "nodeB", "encrypted_key": "b64url(...)"},
+        {"node": "nodeC", "encrypted_key": "b64url(...)"},
     ]
   },
 
