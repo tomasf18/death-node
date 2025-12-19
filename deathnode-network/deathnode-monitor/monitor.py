@@ -14,7 +14,8 @@ import subprocess
 
 # Configuration
 TIME_WINDOW = 30  # seconds
-BYTE_THRESHOLD = 10000  # bytes per TIME_WINDOW
+BYTE_THRESHOLD = 20000  # bytes per TIME_WINDOW
+MAX_REQUESTS = 1 # max allowed sync requests per TIME_WINDOW
 BLOCK_DURATION = 30  # seconds to block
 INTERFACES = ['eth1','eth2']
 
@@ -79,6 +80,8 @@ def packet_handler(packet):
         packet_size = len(packet)
         current_time = time.time()
 
+
+
         # Don't count packets from already blocked IPs
         with stats_lock:
             if src_ip in blocked_ips:
@@ -96,7 +99,7 @@ def calculate_stats():
     current_time = time.time()
     cutoff_time = current_time - TIME_WINDOW
 
-    stats = defaultdict(lambda: {'packets': 0, 'bytes': 0})
+    stats = defaultdict(lambda: {'packets': 0, 'bytes': 0, 'sync_requests': 0})
     ips_to_block = []
 
     with stats_lock:
@@ -109,10 +112,13 @@ def calculate_stats():
             src_ip = packet_data['src_ip']
             stats[src_ip]['packets'] += 1
             stats[src_ip]['bytes'] += packet_data['bytes']
+            if packet_data['bytes'] > 110 and packet_data['bytes'] < 140:
+                stats[src_ip]['sync_requests'] += 1
+
 
         # Check for violations and collect IPs to block
         for src_ip, data in stats.items():
-            if data['bytes'] > BYTE_THRESHOLD:
+            if data['bytes'] > BYTE_THRESHOLD or data['sync_requests'] > MAX_REQUESTS:
                 if src_ip not in blocked_ips and src_ip.endswith("100"):
                     ips_to_block.append(src_ip)
 
@@ -154,7 +160,7 @@ def display_stats():
         print("=" * 95)
         print(f"  DeathNode Monitor (Threshold: {BYTE_THRESHOLD} bytes/{TIME_WINDOW}s)")
         print("=" * 95)
-        print(f"{'Source IP':<20} {'Packets':<12} {'Bytes':<15} {'Formatted':<12} {'Status':<15}")
+        print(f"{'Source IP':<20} {'Packets':<12} {'Bytes':<15} {'Sync':<12} {'Formatted':<12} {'Status':<15}")
         print("-" * 95)
 
         # Get current stats
@@ -165,34 +171,37 @@ def display_stats():
         else:
             # Sort by packet count (descending)
             sorted_stats = sorted(stats_copy.items(),
-                                key=lambda x: x[1]['packets'],
-                                reverse=True)
+                                  key=lambda x: x[1]['packets'],
+                                  reverse=True)
 
             total_packets = 0
             total_bytes = 0
+            total_sync_requests = 0
 
             for src_ip, data in sorted_stats:
                 packets = data['packets']
                 bytes_total = data['bytes']
+                sync_requests = data['sync_requests']
 
                 total_packets += packets
                 total_bytes += bytes_total
+                total_sync_requests += sync_requests
 
                 # Determine status
                 with stats_lock:
                     if src_ip in blocked_ips:
                         time_left = int(blocked_ips[src_ip] - time.time())
                         status = f"[-] BLOCKED ({time_left}s)"
-                    elif bytes_total > BYTE_THRESHOLD * 0.8:
-                        status = "[!]  WARNING"
+                    elif bytes_total > BYTE_THRESHOLD * 0.8 or sync_requests == MAX_REQUESTS:
+                        status = "[!] WARNING"
                     else:
                         status = "[+] OK"
 
-                print(f"{src_ip:<20} {packets:<12} {bytes_total:<15} {format_bytes(bytes_total):<12} {status:<15}")
+                print(f"{src_ip:<20} {packets:<12} {bytes_total:<15} {sync_requests:<12} {format_bytes(bytes_total):<12} {status:<15}")
 
             # Summary
             print("-" * 95)
-            print(f"{'TOTAL':<20} {total_packets:<12} {total_bytes:<15} {format_bytes(total_bytes):<12}")
+            print(f"{'TOTAL':<20} {total_packets:<12} {total_bytes:<15} {total_sync_requests:<12} {format_bytes(total_bytes):<12}")
 
         # Blocked IPs section
         with stats_lock:
@@ -223,17 +232,17 @@ def main():
     print(f"[+] Threshold: {BYTE_THRESHOLD} bytes per {TIME_WINDOW} seconds")
     print(f"[+] Block duration: {BLOCK_DURATION} seconds")
     print("[+] Starting sniffers...\n")
-    
+
     # Start sniffer threads for each interface
     threads = []
     for iface in INTERFACES:
         t = threading.Thread(target=sniffer_thread, args=(iface,), daemon=True)
         t.start()
         threads.append(t)
-    
+
     # Give sniffers time to start
     time.sleep(2)
-    
+
     # Start display
     try:
         display_stats()
@@ -249,5 +258,5 @@ if __name__ == "__main__":
         print("[!] This script must be run as root (sudo)")
         print("[!] Usage: sudo python3 monitor.py")
         sys.exit(1)
-    
+
     main()

@@ -84,7 +84,7 @@ docker --version
 pytohn3 --version
 ```
 
-For last, compile the maven project:
+Lastly, compile the maven project:
 ```sh
 mvn clean install
 ```
@@ -97,7 +97,7 @@ mvn clean install
    - **Monitor**
    - **Client1**
    - **Client2**
-3. After the clone update each network configuration using this [instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#22a-virtualbox), and follow this requirements:
+3. After cloning, update each network configuration using these [instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#22a-virtualbox), and follow these requirements:
     - **Server and Database**: one adapter for `sw0`
     - **Monitor**: three adaptares, first for `sw0`, second for `sw1` and third for `sw2`
     - **Client1**: one adapter for `sw1`

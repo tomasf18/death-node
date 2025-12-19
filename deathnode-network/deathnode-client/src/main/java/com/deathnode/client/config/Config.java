@@ -6,8 +6,8 @@ public class Config {
     
     // Server configuration
     public static final String SERVER_NODE_ID = "server";
-    public static final String SERVER_HOST = "127.0.0.1"; // localhost
-    // public static final String SERVER_HOST = "192.168.0.10"; // VM
+    //public static final String SERVER_HOST = "127.0.0.1"; // localhost
+    public static final String SERVER_HOST = "192.168.0.10"; // VM
     public static final int SERVER_PORT = 9090;
     
     // Sync configuration

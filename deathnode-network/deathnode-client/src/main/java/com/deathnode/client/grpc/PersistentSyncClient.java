@@ -102,7 +102,7 @@ public class PersistentSyncClient {
                 System.out.println("Found " + pendingCount + " pending reports. Triggering sync...");
                 triggerSync();
             } else {
-                System.out.println("No pending reports found");
+                //System.out.println("No pending reports found");
             }
         }, Config.INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS, Config.INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS, TimeUnit.SECONDS);
     }
