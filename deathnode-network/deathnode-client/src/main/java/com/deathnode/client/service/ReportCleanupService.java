@@ -67,6 +67,10 @@ public class ReportCleanupService {
         List<DatabaseService.ReportRow> unsyncedReports = getUnsyncedReports();
         
         System.out.println("Starting cleanup of " + unsyncedReports.size() + " unsynced reports");
+        long sn = Long.MAX_VALUE;
+        for (DatabaseService.ReportRow report : unsyncedReports) {
+            sn = Math.min(sn, report.nodeSequenceNumber);
+        }
         
         int filesDeleted = 0;
         int databaseRecordsDeleted = 0;
@@ -88,7 +92,8 @@ public class ReportCleanupService {
         }
 
         rollbackSelfNodeState();
-        
+        databaseService.fixLocalSequenceNumbers(filesDeleted, sn);
+
         System.out.println("Cleanup completed: " + filesDeleted + " files deleted, " + databaseRecordsDeleted + " database records deleted");
         
         return new CleanupResult(unsyncedReports.size(), filesDeleted, databaseRecordsDeleted, failedDeletions);

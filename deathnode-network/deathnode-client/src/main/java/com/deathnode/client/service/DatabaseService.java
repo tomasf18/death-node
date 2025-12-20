@@ -7,8 +7,6 @@ import java.nio.file.Paths;
 
 import java.sql.*;
 
-import java.time.Instant;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,6 +48,35 @@ public class DatabaseService {
                 }
                 return 0L;
             }
+        }
+    }
+
+    /**
+     * Return last node-local sequence number (0 if not present) by searching reports in order
+     */
+    public long getLastSequenceNumber() throws SQLException {
+        String query = "SELECT node_sequence_number FROM reports ORDER BY node_sequence_number DESC LIMIT 1";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(query)) {
+            try (ResultSet rs = p.executeQuery()) {
+                if (rs.next()) {
+                    long v = rs.getLong(1);
+                    if (rs.wasNull()) return 0L;
+                    return v;
+                }
+                return 0L;
+            }
+        }
+    }
+
+    /**
+     * Shift back gapped sequence numbers
+     */
+    public void fixLocalSequenceNumbers(int offset, long sn) throws SQLException {
+        String query = "UPDATE reports SET node_sequence_number = node_sequence_number - ? WHERE node_sequence_number > ?";
+        try (Connection c = conn(); PreparedStatement p = c.prepareStatement(query)) {
+            p.setLong(1, offset);
+            p.setLong(2, sn);
+            p.executeUpdate();
         }
     }
 

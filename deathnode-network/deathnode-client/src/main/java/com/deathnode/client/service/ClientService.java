@@ -31,7 +31,7 @@ public class ClientService {
         this.db = db;
         this.syncClient = new PersistentSyncClient(db, Config.SERVER_HOST, Config.SERVER_PORT);
         try {
-            this.lastNodeSequenceNumber = new AtomicLong(db.getLastSequenceNumber(Config.getNodeSelfId()));
+            this.lastNodeSequenceNumber = new AtomicLong(db.getLastSequenceNumber());
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize lastNodeSequenceNumber", e);
         }
@@ -123,7 +123,7 @@ public class ClientService {
         report.setStatus("pending_validation");
 
         // 2. Prepare metadata
-        long nextSeq = this.lastNodeSequenceNumber.incrementAndGet();
+        long nextSeq = db.getLastSequenceNumber() + 1;
 
         String prevHash = db.getLastEnvelopeHash(Config.getNodeSelfId());
         if (prevHash == null) prevHash = "";
