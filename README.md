@@ -15,7 +15,7 @@
 
 This repository contains documentation and source code for the *Network and Computer Security (SIRS)* project scenario **DeathNode**.
 
-The [REPORT](./docs/REPORT.md) document provides a detailed overview of the key technical decisions and various components of the implemented project.
+The [REPORT](resources/docs/REPORT.md) document provides a detailed overview of the key technical decisions and various components of the implemented project.
 It offers insights into the rationale behind these choices, the project's architecture, and the impact of these decisions
 on the overall functionality and performance of the system.
 
@@ -110,7 +110,7 @@ For each machine, there is a **boot script** named `boot-config.sh` that configu
 to that machine. This script sets a static IP in the appropriate subnet and applies firewall rules required
 for the machine to communicate with the others.
 
-More detailed information about these rules is available in [REPORT.md](./docs/REPORT.md).
+More detailed information about these rules is available in [REPORT.md](resources/docs/REPORT.md).
 
 Next we have custom instructions for each machine.
 

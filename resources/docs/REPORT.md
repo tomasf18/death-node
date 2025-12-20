@@ -441,7 +441,7 @@ The implementation avoids dependencies with the rest of the system, making it hi
 
 ### **5.4 Storage**
 
-![](../resources/img/A53-DeathNode-DB.png)
+![](../img/A53-DeathNode-DB.png)
 
 The picture above illustrates the database schema used in our implementation, in both client nodes and database server. The database is used to store metadata about reports, nodes, and synchronization state, while we use the filesystem to store the actual envelope files containing the encrypted reports.
 
@@ -451,7 +451,7 @@ Private keys are stored using **Java KeyStore (JKS)** on each node. JKS provides
 
 #### **5.5.1 Network and Machine Setup**
 
-![](../resources/img/Network_Diagram.png)
+![](../img/Network_Diagram.png)
 
 #### **5.5.2 Firewall rules**
 
