@@ -67,6 +67,8 @@ public class ReportCleanupService {
         List<DatabaseService.ReportRow> unsyncedReports = getUnsyncedReports();
         
         System.out.println("Starting cleanup of " + unsyncedReports.size() + " unsynced reports");
+
+        // FIXME Very hacky way of doing this...
         long sn = Long.MAX_VALUE;
         for (DatabaseService.ReportRow report : unsyncedReports) {
             sn = Math.min(sn, report.nodeSequenceNumber);

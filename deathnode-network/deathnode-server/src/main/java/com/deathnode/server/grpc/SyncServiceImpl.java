@@ -16,11 +16,12 @@ import net.devh.boot.grpc.server.service.GrpcService;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+
 import com.google.protobuf.ByteString;
 
 /**
  * gRPC service implementation for bidirectional sync streaming.
- * 
+ * <p>
  * This handles the server side of the sync protocol:
  * 1. Receives Hello from client
  * 2. Registers client with coordinator
@@ -31,7 +32,7 @@ import com.google.protobuf.ByteString;
  */
 @GrpcService
 public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
-    
+
     private final SyncCoordinator coordinator;
 
     public SyncServiceImpl(SyncCoordinator coordinator) {
@@ -47,7 +48,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
      * handle a single client's stream.
      */
     private static class ClientStreamHandler implements StreamObserver<ClientMessage> {
-        
+
         private final StreamObserver<ServerMessage> responseObserver;
         private final SyncCoordinator coordinator;
         private String nodeId;
@@ -78,7 +79,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         private void handleHello(Hello hello) {
             this.nodeId = hello.getNodeId();
-            
+
             if (hello.getStartSync()) {
                 String roundId = coordinator.startRoundIfAbsent(this.nodeId);
                 System.out.println("Client " + this.nodeId + " initiated sync round " + roundId);
@@ -91,23 +92,23 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
         }
 
         private void handleBufferUpload(BufferUpload upload) {
-            String bufferNodeId = upload.getNodeId();   
-            
+            String bufferNodeId = upload.getNodeId();
+
             // Convert protobuf repeated bytes to List<byte[]>
             List<byte[]> envelopes = upload.getEnvelopesList().stream()
-            .map(ByteString::toByteArray)
-            .toList();
-            
+                    .map(ByteString::toByteArray)
+                    .toList();
+
             byte[] bufferRoot = upload.getBufferRoot().toByteArray();
             byte[] signedBufferRoot = upload.getSignedBufferRoot().toByteArray();
 
             SyncCoordinator.VerificationsResult verificationsResult = coordinator.performAllVerifications(bufferNodeId, this.nodeId, envelopes, bufferRoot, signedBufferRoot);
-            
+
             if (!verificationsResult.isSuccess()) {
                 sendError(verificationsResult.getErrorCode(), verificationsResult.getErrorMessage());
-                return; 
+                return;
             }
-            
+
             System.out.println("Received buffer upload from " + bufferNodeId + " with " + upload.getEnvelopesCount() + " envelopes");
 
             try {
@@ -119,9 +120,11 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                         System.err.println("Sync round failed: " + error.getMessage());
                         sendError("SYNC_FAILED", error.getMessage());
                         responseObserver.onCompleted();
-                    } else {
+                    } else if (result == null) {
+                        System.out.println("Empty sync round. Nothing to do...");
+                    } else
                         sendSyncResult(result);
-                    }
+
                 });
 
             } catch (Exception e) {
@@ -168,9 +171,9 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         private void sendError(String code, String message) {
             Error error = Error.newBuilder()
-                .setCode(code)
-                .setMessage(message)
-                .build();
+                    .setCode(code)
+                    .setMessage(message)
+                    .build();
 
             ServerMessage msg = ServerMessage.newBuilder()
                     .setError(error)

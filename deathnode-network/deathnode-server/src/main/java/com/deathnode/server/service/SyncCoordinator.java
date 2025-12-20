@@ -51,32 +51,26 @@ public class SyncCoordinator {
     private final FileStorageService fileStorageService;
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().create();
     private final Map<String, ClientConnection> allConnections = new HashMap<>();
-
+    private final Object roundLock = new Object();
+    private final ScheduledExecutorService timeoutExecutor = Executors.newScheduledThreadPool(1);
     // configuration injected from application.yaml
     @Value("${keystore_password}")
     private String keystorePassword;
-
     @Value("${ed_private_key_alias}")
     private String edPrivateKeyAlias;
-
     @Value("${rsa_private_key_alias}")
     private String rsaPrivateKeyAlias;
-
     @Value("${keystore_path}")
     private String keystorePath;
-
     @Value("${sync.timeout-ms:5000}")
     private long syncTimeoutMs;
-
     private SyncRound activeRound = null;
-    private final Object roundLock = new Object();
-    private final ScheduledExecutorService timeoutExecutor = Executors.newScheduledThreadPool(1);
 
     public SyncCoordinator(NodeRepository nodeRepository,
-            ReportRepository reportRepository,
-            FileStorageService fileStorageService,
-            NodeSyncStateRepository nodeSyncStateRepository,
-            SignedBlockMerkleRootRepository signedBlockMerkleRootRepository) {
+                           ReportRepository reportRepository,
+                           FileStorageService fileStorageService,
+                           NodeSyncStateRepository nodeSyncStateRepository,
+                           SignedBlockMerkleRootRepository signedBlockMerkleRootRepository) {
         this.nodeRepository = nodeRepository;
         this.reportRepository = reportRepository;
         this.fileStorageService = fileStorageService;
@@ -234,7 +228,7 @@ public class SyncCoordinator {
 
     /**
      * Finalize a round: order envelopes, persist, and return result.
-     * 
+     * <p>
      * For now: Simple timestamp-based ordering, no security checks.
      */
     @Transactional
@@ -244,6 +238,8 @@ public class SyncCoordinator {
         // 1. Collect all envelopes with metadata
         List<EnvelopeWithMeta> allEnvelopes = new ArrayList<>();
         Map<String, List<byte[]>> buffers = round.getBuffers();
+
+        if (areEmpty(buffers.values())) return null;
 
         for (Map.Entry<String, List<byte[]>> entry : buffers.entrySet()) {
             String nodeId = entry.getKey();
@@ -358,7 +354,7 @@ public class SyncCoordinator {
                 prevBlockNumber + 1,
                 HashUtils.bytesToHex(blockRoot),
                 (prevBlockRoot != null) ? HashUtils.bytesToHex(prevBlockRoot) : null
-        );  
+        );
         signedBlockMerkleRootRepository.save(newSignedBlockMerkleRoot);
 
         // 5. Complete the round's future
@@ -449,6 +445,13 @@ public class SyncCoordinator {
     private long computeNextGlobalSequence() {
         Long max = reportRepository.findMaxGlobalSequenceNumber();
         return (max == null) ? 1L : max + 1L;
+    }
+
+    private boolean areEmpty(Collection<List<byte[]>> collection) {
+        for (List<byte[]> list : collection) {
+            if (!list.isEmpty()) return false;
+        }
+        return true;
     }
 
     // ========== Helper Classes ==========
@@ -546,7 +549,7 @@ public class SyncCoordinator {
         final Instant timestamp;
 
         EnvelopeWithMeta(Node signerNode, byte[] envelopeBytes, String hash,
-                Envelope envelope, Instant timestamp) {
+                         Envelope envelope, Instant timestamp) {
             this.signerNode = signerNode;
             this.envelopeBytes = envelopeBytes;
             this.hash = hash;
@@ -566,8 +569,16 @@ public class SyncCoordinator {
             this.errorMessage = errorMessage;
         }
 
-        public boolean isSuccess() { return success; }
-        public String getErrorCode() { return errorCode; }
-        public String getErrorMessage() { return errorMessage; }
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public String getErrorCode() {
+            return errorCode;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
     }
 }
