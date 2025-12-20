@@ -2,80 +2,90 @@
 
 ## **1. Introduction**
 
-The project scenario that was assigned to us was DeathNode. Later on, we chose Challenge B as the security challenge to tackle.    
+DeathNode is an anonymous reporting platform operated by a clandestine group called The Cult of Kika. Members submit encrypted reports about alleged crimes or suspects before information reaches authorities. We were assigned this scenario and selected **Challenge B** (vigilant server monitoring) as our security focus.
 
-The corresponding description says that that DeathNode operates as a peer-backed system, however, when we discussed some implementation details with teacher **Vaibhav Arora**, he informed us that clients do not communicate with each other, as all the network reports synchronization happens in a centralized way with a special network node: the server. So the only characteristic that remains from a peer-backed system is that clients keep local copies of the network documents, eventually synchronizing with the server for consistency.  
+**Architectural clarification**: While the scenario describes a "peer-backed system", after discussion with teacher **Vaibhav Arora**, we were clarified that clients do not communicate directly with each other. Instead, every communication in the network occurs centrally through a coordination server. The peer-backed characteristic manifests only in that each client maintains a local copy of all network reports, periodically synchronizing with the server for consistency.
 
-Another important detail in the description is that all the reports are anonymous, and the system must ensure username anonimity of participants and resist attacks attempting to deanonymize or block users. We interpreted this requirement as that it should be impossible for an attacker to link a report to a specific identity, which is already satisfied *a priori* by the fact that the network does not require or store any user authentication information from nodes publications. The closest thing is a pseudonym that clients can set for themselves, but this is not linked to any real identity, as anyone can choose any pseudonym they want or even change it at any time.   
+**Anonymity interpretation**: The requirement for "full username anonymity" is satisfied by design, as the system requires no user authentication or identity verification. Participants choose pseudonyms freely, which are not linked to real identities and can be changed at will. Therefore, linking reports to specific individuals is architecturally impossible without external information.
 
-The remaining description of the project scenario is clear, so we did not have any furhter divergences in the interpretation. 
+## **2. Goals**
 
-**Note**: We are not including here the remaining interpretaion as it would be redundant with the scenario description.
+Given the scenario requirements and our architectural interpretation, this project aims to protect:
 
+**Core security objectives** (from scenario requirements):
 
-## **2. Goals** 
+- **Confidentiality (SR1)**: Only authorized network participants can decrypt reports. Protects sensitive information from disclosure to external attackers or unauthorized nodes.
 
-Having the above interpretation of the project scenario clear and the scenario description in mind, we can now define what we want to protect and for what purpose.
+- **Individual Integrity (SR2)**: Reports cannot be altered after submission. Protects against tampering during transmission, storage or by compromised system components (data corruption, malicious injection).
 
-We know that reports exchanged through DeathNode contain potentially sensitive information and must be protected to maintain participant anonymity and platform integrity. 
-As stated in [1. Introduction](#1-introduction), participant anonymity is already satisfied.  
+- **Batch Integrity (SR3)**: Missing, duplicated or out-of-order reports are detectable during synchronization. Ensures complete and correct history reconstruction at all nodes.
 
-So the main goals of our project are:
-- Confidentiality: Ensure that reports are only accessible to authorized participants during transmission and storage, so that sensitive information is not disclosed to unauthorized entities outside the anonymous network.
-- Integrity: Ensure that reports are not altered or tampered with during transmission and storage (i.e., in transit and at rest), so that the information remains accurate and trustworthy, avoiding, for example, data corruption, malicious content injection from attackers that compromise the system nodes machines.
-- Consistency: Ensure that all participants have a consistent view of the reports, detecting any missing, duplicated, or out-of-order reports during synchronization.  
-- Authenticity: Ensure that reports are genuine and originate from legitimate participants of the network, detecting any forged or diverging histories during synchronization.
+- **Consistency (SR4)**: Forged or diverging histories are detectable. Prevents malicious servers or nodes from presenting conflicting views of network state.
 
-And finally, related to the challenge approach:
+**Challenge B objective**:
 
-- Availability: Ensure that the system remains operational and accessible to legitimate participants, even in the presence of flooding attacks from misbehaving members, so that the network can continue to function effectively without disruption.
+- **Availability**: The system remains operational despite flooding attacks. A vigilant monitor detects misbehaving members and can ban them (temporarily or permanently), preventing spam from disrupting legitimate operations.
 
+These objectives collectively ensure that the reporting platform remains trustworthy, resilient and operational even under adversarial conditions, while preserving the pseudonymous nature of participant interactions.
 
 ## **3. Assumptions**
+**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!!**
 
-The DeathNode network follows a centralized synchronization model in which all nodes push reports to, and pull reports from, a central server. This server is responsible for coordinating synchronization but **is not trusted** with access to report contents: it must never be able to read plaintext data. All report contents remain encrypted **end-to-end** between authorized nodes.
+The DeathNode network follows a centralized synchronization model in which all nodes exchange reports through a central server. This server is responsible solely for coordinating synchronization and ordering and is **not trusted** with access to report contents. All reports are encrypted end-to-end and remain confidential to authorized client nodes at all times.
 
-The set of nodes in the anonimity network is fixed and static. The network is alredy complete at deployment time. For our demonstration, we will consider a small network of 2 clients nodes, 1 server node and the database-server, where all clients and server know each other from the begining. Being the network static, all authorized nodes are known in advance, and no dynamic membership to the network is assumed. Cryptographic keys are pre-distributed during setup, where certificates are provided through a certification authority. Every node belonging to this initial trusted set is authorized to read the reports. Nodes that are not part of this predefined group are considered unauthorized. 
+The anonymity network is assumed to be fixed and static. The full set of participating nodes is known at deployment time, and no dynamic membership, joins or revocations are supported. For demonstration purposes, the system consists of two client nodes, one central synchronization server and one database server. All nodes are pre-configured with the necessary cryptographic material, and certificates are issued by a certification authority during setup. Only nodes belonging to this predefined set are authorized to participate in the network and access reports.
 
-Reports are immutable: once published, they cannot be edited or deleted. Anonymity is based solely on the use of pseudonyms and is therefore treated as an application-level concern rather than a cryptographic one. 
+Reports are immutable: once published, they cannot be modified or deleted. Anonymity relies exclusively on the use of pseudonyms and is therefore treated as an application-level concern rather than a cryptographic guarantee.
 
-We assume no crashes or benign failures in the system. Any detected inconsistency is treated as a potential attack and leads to immediate rejection of the affected data. Under this model, availability is sacrificed in favor of strong integrity guarantees.  
+We assume no benign failures or crashes. Any detected inconsistency is treated as a potential attack and results in immediate rejection of the affected data. Under this assumption, availability is intentionally sacrificed in favor of strong integrity and consistency guarantees.
 
-Regarding the challenge, the description states "a vigilant server, appointed by the leadership". As the implementation requires 2 VM servers: a central server for synchronization and the monitor server, we assume that the monitor server is always the same, thus not necessarily "appointed by the leadership".
+The challenge description refers to a “vigilant server, appointed by the leadership”. In our implementation, this role is realized by a fixed monitor server deployed alongside the central synchronization server, rather than by dynamically appointed leadership.
 
-The overall design explicitly separates three security goals: confidentiality of report content, integrity of individual reports, and global consistency of histories across nodes. Confidentiality is provided exclusively through encryption, while integrity and ordering are enforced through per-sender chaining and compact, signed cryptographic commitments. The implementation is intentionally lightweight and strictly focused on what is required to meet the project’s security requirements, avoiding unnecessary complexity or overengineering, as also recommended by the TA's.
-
+The system design explicitly separates three security goals: confidentiality of report contents, integrity of individual reports, and global consistency of histories across nodes. Confidentiality is achieved solely through encryption, while integrity and ordering are enforced through per-sender chaining and signed cryptographic commitments. The implementation is intentionally lightweight and limited to mechanisms strictly required to meet the project’s security objectives, not to overengineer, as also recommended by the TA's.
 
 ### **Threat Model**
 
-**(_Define who is fully trusted, partially trusted, or untrusted._)
-(_Define how powerful the attacker is, with capabilities and limitations, i.e., what can he do and what he cannot do_)**
-
 In this project, we consider the following trust levels.
 
-#### **Fully Trusted** 
+#### **Fully Trusted**
 
-- The Certification Authority (CA) that issues and manages cryptographic keys and certificates for network nodes. 
+* The Certification Authority (CA) that issues and manages cryptographic keys and certificates for network nodes.
 
 #### **Partially Trusted**
 
-- Each Client Node: While client nodes are trusted to decrypt and read the reports they are authorized to access, they are not trusted with the integrity of the overall system. An attacker compromising a client node could attempt to tamper with report contents at rest (both in the local database or in the filesystem), inject forged reports, or withhold legitimate reports. However, the attacker cannot break cryptographic primitives or forge valid signatures without access to the node's private keys. Our solution mitigates these risks through integrity verification and consistency checks.
+* **Each Client Node:**
+  Client nodes are trusted to decrypt and read reports they are authorized to access, but not with preserving global integrity. A compromised client may attempt to:
 
-- The Monitor Server: The monitor server is trusted to observe network activity and detect flooding attacks from misbehaving nodes. However, it is not trusted with access to report contents and is a potential attack target. A compromised monitor server could attempt to tamper with metadata or drop legitimate reports. It cannot forge cryptographic commitments or signatures that nodes verify independently.
+  * tamper with locally stored encrypted envelopes or metadata,
+  * inject forged or replayed reports,
+  * withhold valid reports or selectively refuse to synchronize.
 
+  The attacker is assumed unable to break cryptographic primitives or forge valid signatures without access to private keys. Integrity verification, per-node chaining, and global consistency checks mitigate these attacks.
+
+* **The Monitor Server:**
+  The monitor server is trusted only to observe synchronization behavior and detect flooding or protocol misuse. It is not trusted with report contents. A compromised monitor may attempt to drop messages, alter metadata, or misreport synchronization state, but cannot forge valid cryptographic commitments verified by clients.
 
 #### **Untrusted**
 
-- The Network: The communication network is not trusted. It is assumed that an attacker could eavesdrop, intercept, modify, or inject messages during transmission between nodes. So all communications must be secured to prevent such attacks.
+* **The Network:**
+  The communication network is fully untrusted. An attacker may eavesdrop, delay, replay, modify, or inject messages between nodes. All protocol messages are therefore assumed to require confidentiality, integrity and authenticity protection.
 
-- The Central Server: The server is not trusted with access to report contents. It is assumed that the server could be compromised by an attacker who may attempt to read, modify, or delete reports during transmission or storage. 
+* **The Central Server:**
+  The central server is assumed to be potentially malicious. An attacker controlling it may attempt to:
 
-- The Database Server: The database server is not trusted with access to report contents. It is assumed that the database server could be compromised by an attacker who may attempt to read, modify, or delete reports during storage. Corresponding measures are taken to handle this risk.
+  * reorder, omit, duplicate, or selectively deliver reports,
+  * tamper with stored metadata or synchronization state,
+  * perform rollback or equivocation attacks across clients.
 
+  The server is assumed incapable of decrypting reports or forging signatures, and all such misbehavior must be detectable by honest clients.
+
+* **The Database Server:**
+  The database server is untrusted and may be compromised independently. An attacker may attempt to read, modify, delete or roll back metadata entries. Since it stores no plaintext reports and all critical data is integrity-protected, such attacks need to be detectable during verification.
 
 ## **4. Solution Brief**
 
-**(_Brief solution description_)**
+**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!! (_Brief solution description_)**
+(IS THIS NECESSARY?)
  
 ## **5. Project Development**
 
@@ -195,6 +205,8 @@ GCM runs CTR internally which requires a 16-byte counter. The IV provides 12 of 
 
 ##### **Implementation details**
 
+* **Programming language:** Java 21
+* **Cryptographic libraries:** Java Cryptography Architecture (JCA).
 * **Canonical JSON:** The code calls `canonicalJson(...)` on `JsonObject`s and then uses the resulting bytes as the canonical representation for signatures and AEAD AAD. 
 * **Signing:** `signDataHex(payload, signerPrivKey)` signs `(report || metadata)` using `Signature.getInstance("Ed25519")` and produces a hex string.
 * **Inner payload & encryption:** The `report` and `signature` are serialized to JSON and encrypted as the AEAD plaintext using AES-256-GCM. The metadata bytes are supplied to `Cipher.updateAAD(...)` before `doFinal(...)`.
@@ -402,9 +414,13 @@ Hash operations:
 
 ### **5.3 Security Challenge**
 
+**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!!**
+
 The fact that the reports are anonymous, could easily lead to attacks where users flood the network with fake reports, trying to harden the system and make it unusable for legitimate users. With this in mind, we decided that Challenge B would be the most interesting one to tackle, as it requires us to design a solution that resists such attacks. 
 
 #### **5.3.1 Solution Design**
+
+**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!!**
 
 **(_Describe the new requirements introduced in the security challenge and how they impacted your original design._)
 (_Explain how your team redesigned or extended the solution to meet the security challenge, including key distribution and other security measures._)**
@@ -431,6 +447,8 @@ Private keys are stored using **Java KeyStore (JKS)** on each node. JKS provides
 ### **5.5 Infrastructure**
 
 #### **5.5.1 Network and Machine Setup**
+
+**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!!**
 
 ![](../resources/img/Network_Diagram.png)
 
