@@ -182,12 +182,12 @@ Signatures and hash chains require a deterministic byte representation. We canon
 
 ##### **Why these choices are effective**
 
-- AEAD provides confidentiality and integrity in one primitive, and AES-GCM is widely available and efficient for this **(add the source)**. Binding metadata as AAD ensures metadata or ciphertext cannot be changed without detection. This is because GCM produces an authentication tag that covers both the ciphertext and the AAD, so any modification to either will result in decryption failure as the tag will not match.
-- RSA-OAEP with SHA-256 is a efficient way to wrap symmetric keys for a set of recipients, as RSA is performant for small data like keys. **(add the source)**
-- The ideal GCM tag size is typically 128 bits (16 bytes) for strong security and broad compatibility **(add the source)**.
+- AEAD provides confidentiality and integrity in one primitive, and AES-GCM is widely available and efficient for this [[1]](#ref1)[[2]](#ref2). Binding metadata as AAD ensures metadata or ciphertext cannot be changed without detection. This is because GCM produces an authentication tag that covers both the ciphertext and the AAD, so any modification to either will result in decryption failure as the tag will not match.
+- RSA-OAEP with SHA-256 is a efficient way to wrap symmetric keys for a set of recipients, as RSA is performant for small data like keys. [[3]](#ref3)
+- The ideal GCM tag size is typically 128 bits (16 bytes) for strong security and broad compatibility [[2]](#ref2).
 GCM runs CTR internally which requires a 16-byte counter. The IV provides 12 of those, the other 4 are an actual block-wise counter. If we supply a larger-than-12-bytes IV then it needs to be hashed allowing collisions to happen and raising the risk for IV reuse unneccessarily high.
-- Ed25519 is used for signatures because it is fast, small, and standardized for signatures (not good, however, for encryption). This was chosen over ECDSA due to its stronger security guarantees and safer design **(add the source)**.
-- Signing and encryption address different security properties. Using separate keys avoids cross-protocol attacks and follows standard cryptographic practice (e.g., TLS, PGP, Signal), ensuring that compromising one key does not compromise the other security properties, which increases overall system robustness. **(add the source)**
+- Ed25519 is used for signatures because it is fast, small, and standardized for signatures (not good, however, for encryption). This was chosen over ECDSA due to its stronger security guarantees and safer design [[4]](#ref4).
+- Signing and encryption address different security properties. Using separate keys avoids cross-protocol attacks and follows standard cryptographic practice, ensuring that compromising one key does not compromise the other security properties, which increases overall system robustness.
 - The per-sender sequence number plus the prev-hash is simple and efficient to detect missing, duplicate or forked sequences in a synced peer network where a full consensus protocol would be overkill.
 
 #### **5.1.2 Implementation & Technologies**
@@ -637,7 +637,10 @@ While the system is cryptographically sound, several improvements could enhance 
 
 ## **7. Bibliography**
 
-(_Present bibliographic references, with clickable links. Always include at least the authors, title, "where published", and year._)
+[1]  **Dworkin, M.** *Recommendation for Block Cipher Modes of Operation: Galois/Counter Mode (GCM) and GMAC*. National Institute of Standards and Technology (NIST), 2007. [Link](https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-38d.pdf)  
+[2] **Apache Iceberg.** "AES GCM Stream Spec." *Apache Iceberg*, n.d. [Link](https://iceberg.apache.org/gcm-stream-spec/#file-structure)  
+[3] **Poturalska, S.** "How RSA-OAEP Secures Symmetric Keys: Asymmetric Armor for Real Encryption Systems." *Medium*, 2025. [Link](https://medium.com/@santura/how-rsa-oaep-secures-symmetric-keys-asymmetric-armor-for-real-encryption-systems-44b6d26e17d8#:~:text=RSA%2DOAEP%20(Optimal%20Asymmetric%20Encryption%20Padding)%20is%20a,decryption%20error%20is%20indistinguishable%20from%20padding%20failure)  
+[4] **Kontsevoy, E.** "Comparing SSH Keys - RSA, DSA, ECDSA, or EdDSA?" *Teleport*, 2022. [Link](https://goteleport.com/blog/comparing-ssh-keys/)  
 
 ----
 END OF REPORT
