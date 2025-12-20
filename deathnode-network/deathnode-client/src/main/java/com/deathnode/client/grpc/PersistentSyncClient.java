@@ -5,7 +5,9 @@ import com.deathnode.client.service.DatabaseService;
 import com.deathnode.client.service.ReportCleanupService;
 import com.deathnode.tool.util.KeyLoader;
 import com.deathnode.common.grpc.*;
+import com.deathnode.common.grpc.ServerMessage;
 import com.deathnode.common.grpc.Error;
+import com.deathnode.common.grpc.Ack;
 import com.deathnode.common.model.Envelope;
 import com.deathnode.common.model.Metadata;
 import com.deathnode.common.util.HashUtils;
@@ -24,7 +26,7 @@ import java.sql.SQLException;
 
 /**
  * Persistent gRPC client that maintains an open connection to the server.
- * 
+ * <p>
  * This allows the server to push RequestBuffer messages at any time,
  * enabling coordinated sync rounds across all nodes.
  */
@@ -35,7 +37,7 @@ public class PersistentSyncClient {
     private final Queue<String> pendingEnvelopes = new ConcurrentLinkedQueue<>();
     private final ScheduledExecutorService timeoutExecutor = Executors.newScheduledThreadPool(1);
     private final ScheduledExecutorService pendingReportsExecutor = Executors.newScheduledThreadPool(1);
-    
+
     private StreamObserver<ClientMessage> requestObserver;
     private volatile boolean connected = false;
     private volatile String currentRoundId = null;
@@ -51,7 +53,7 @@ public class PersistentSyncClient {
 
     /**
      * Connect to server and maintain persistent connection.
-     * 
+     *
      * @param startSync If true, this client initiates a sync round
      */
     public void connect() {
@@ -63,7 +65,7 @@ public class PersistentSyncClient {
         System.out.println("Connecting to server...");
 
         SyncServiceGrpc.SyncServiceStub asyncStub = connectionManager.getAsyncStub();
-        
+
         // Open bidirectional stream
         requestObserver = asyncStub.sync(new ServerResponseHandler(db));
 
@@ -94,10 +96,10 @@ public class PersistentSyncClient {
         }
 
         System.out.println("Starting pending reports monitor (interval: " + Config.INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS + " seconds)");
-        
+
         pendingReportsTask = pendingReportsExecutor.scheduleAtFixedRate(() -> {
             int pendingCount = pendingEnvelopes.size();
-            
+
             if (pendingCount > 0) {
                 System.out.println("Found " + pendingCount + " pending reports. Triggering sync...");
                 triggerSync();
@@ -124,30 +126,30 @@ public class PersistentSyncClient {
     private void handleConnectionTimeout() {
         System.err.println("=== NODE CORRUPTED ===");
         System.err.println("Connection timeout detected. Cleaning up unsynced reports...");
-        
+
         try {
             ReportCleanupService.CleanupResult result = cleanupService.cleanupAllUnsyncedReports();
-            
+
             System.out.println("Cleanup completed successfully:");
             System.out.println("  - Total unsynced reports found: " + result.getTotalReportsFound());
             System.out.println("  - Files deleted: " + result.getFilesDeleted());
             System.out.println("  - Database records deleted: " + result.getDatabaseRecordsDeleted());
-            
+
             if (!result.isComplete()) {
                 System.err.println("WARNING: Some deletions failed:");
                 for (String failedHash : result.getFailedDeletions()) {
                     System.err.println("  - Failed to cleanup: " + failedHash);
                 }
             }
-            
+
             // Clear the buffer
             int bufferSize = pendingEnvelopes.size();
             pendingEnvelopes.clear();
             System.out.println("Pending buffer cleared: " + bufferSize + " envelopes removed");
-            
+
             System.err.println("=== RECOVERY COMPLETE ===");
             System.err.println("All unsynced reports have been deleted. The node can now reconnect.");
-            
+
         } catch (SQLException e) {
             System.err.println("CRITICAL ERROR during cleanup: " + e.getMessage());
             System.err.println("Manual intervention may be required to clean up unsynced reports.");
@@ -161,10 +163,10 @@ public class PersistentSyncClient {
     private void startTimeoutMonitoring(String roundId) {
         // Cancel any existing timeout task
         cancelTimeoutMonitoring("Starting new timeout monitoring for round " + roundId);
-        
+
         roundStartTime = System.currentTimeMillis();
         currentRoundId = roundId;
-        
+
         // Schedule a task to check for timeout
         this.timeoutTask = timeoutExecutor.schedule(() -> {
             synchronized (this) {
@@ -172,10 +174,10 @@ public class PersistentSyncClient {
                 if (!roundId.equals(currentRoundId)) {
                     return; // Round was completed or changed
                 }
-                
+
                 long elapsedMs = System.currentTimeMillis() - roundStartTime;
                 long timeoutMs = Config.SYNC_TIMEOUT_SECONDS * 1000;
-                
+
                 if (elapsedMs >= timeoutMs) {
                     System.err.println("TIMEOUT: Round " + roundId + " exceeded " + Config.SYNC_TIMEOUT_SECONDS + " seconds");
                     currentRoundId = null; // Clear round ID
@@ -238,7 +240,7 @@ public class PersistentSyncClient {
                 .build();
 
         requestObserver.onNext(helloMsg);
-        
+
         // Start timeout monitoring (UUID of round will be assigned by server, use a placeholder)
         startTimeoutMonitoring("initiating-" + System.currentTimeMillis());
     }
@@ -273,10 +275,12 @@ public class PersistentSyncClient {
 
         private final DatabaseService db;
         VerificationsHandler verificationsHandler;
+        private PendingBlock pendingBlock;
 
         public ServerResponseHandler(DatabaseService db) {
             this.db = db;
             this.verificationsHandler = new VerificationsHandler(db);
+            this.pendingBlock = null;
         }
 
         @Override
@@ -287,13 +291,30 @@ public class PersistentSyncClient {
                 } else if (serverMessage.hasSyncResult()) {
                     handleSyncResult(serverMessage.getSyncResult());
                 } else if (serverMessage.hasAck()) {
-                    System.out.println("Server ACK: " + serverMessage.getAck().getMessage());
+                    String message = serverMessage.getAck().getMessage();
+                    checkForCommit(serverMessage, message);
+                    System.out.println("Server ACK: " + message);
                     cancelTimeoutMonitoring("Server ACK received in time");
                 } else if (serverMessage.hasError()) {
                     handleError(serverMessage.getError());
                 }
             } catch (Exception e) {
                 System.out.println("Error handling server message: " + e.getMessage());
+            }
+        }
+
+        private void checkForCommit(ServerMessage serverMessage, String message) {
+            try {
+                if (message.startsWith("commit")) {
+                    boolean success = serverMessage.getAck().getSuccess();
+                    if (success) {
+                        commitBlock();
+                    } else if (pendingBlock != null && message.split(" ")[1].equals(new String(pendingBlock.root)))
+                        pendingBlock = null;
+                }
+            }
+            catch (Exception e) {
+                return;
             }
         }
 
@@ -327,7 +348,7 @@ public class PersistentSyncClient {
                         System.err.println("Failed to read envelope " + pathStr + ": " + e.getMessage());
                     }
                 }
-                
+
                 PrivateKey signPrivateKey = KeyLoader.loadPrivateKeyFromKeystore(Config.ED_PRIVATE_KEY_ALIAS, Config.getKeystorePath(), Config.KEYSTORE_PASSWORD);
                 // Compute and sign Merkle root
                 byte[] merkleRoot = MerkleUtils.computeMerkleRoot(envelopesToSend);
@@ -361,7 +382,7 @@ public class PersistentSyncClient {
             String roundId = result.getRoundId();
             List<byte[]> orderedEnvelopes = new ArrayList<>();
             for (int i = 0; i < result.getOrderedEnvelopesCount(); i++) {
-                    orderedEnvelopes.add(result.getOrderedEnvelopes(i).toByteArray());
+                orderedEnvelopes.add(result.getOrderedEnvelopes(i).toByteArray());
             }
             long blockNumber = result.getBlockNumber();
             byte[] blockRoot = result.getBlockRoot().toByteArray();
@@ -380,12 +401,31 @@ public class PersistentSyncClient {
                     perNodeSignedBufferRoots,
                     prevBlockRoot
             );
-            
+
+            /*
             if (!verificationsResult.isSuccess()) {
                 sendError(verificationsResult.getErrorCode(), verificationsResult.getErrorMessage());
                 return; 
             }
-            
+             */
+
+            boolean success = verificationsResult.isSuccess();
+            sendBlockAck(success);
+            if (!success) {
+                System.out.println("[!] Block failed verification. Voiding round " + roundId);
+                return;
+            }
+
+            pendingBlock = new PendingBlock(result, blockNumber, blockRoot);
+            System.out.println("Pending commit...");
+
+        }
+
+        private void commitBlock() {
+            SyncResult result = pendingBlock.result;
+            long blockNumber = pendingBlock.number;
+            byte[] blockRoot = pendingBlock.root;
+
             try {
                 db.upsertBlockState(blockNumber, HashUtils.bytesToHex(blockRoot));
             } catch (SQLException e) {
@@ -418,6 +458,8 @@ public class PersistentSyncClient {
             } catch (Exception e) {
                 System.err.println("Failed to process SyncResult: " + e.getMessage());
             }
+            pendingBlock = null;
+
         }
 
         private boolean processReceivedEnvelope(byte[] envelopeBytes) {
@@ -454,7 +496,7 @@ public class PersistentSyncClient {
                 long nodeSeq = metadata.getNodeSequenceNumber();
                 String prevHash = metadata.getPrevEnvelopeHash();
                 String metadataTimestamp = metadata.getMetadataTimestamp();
-                
+
                 try {
                     if (isNew) {
                         db.insertReport(hash, filePath.toString(), signer, nodeSeq, db.getGlobalSeqFromLastSyncedReport() + 1, metadataTimestamp, prevHash);
@@ -495,12 +537,24 @@ public class PersistentSyncClient {
 
         private void sendError(String code, String message) {
             Error error = Error.newBuilder()
-                .setCode(code)
-                .setMessage(message)
-                .build();
+                    .setCode(code)
+                    .setMessage(message)
+                    .build();
 
             ClientMessage msg = ClientMessage.newBuilder()
                     .setError(error)
+                    .build();
+
+            PersistentSyncClient.this.requestObserver.onNext(msg);
+        }
+
+        private void sendBlockAck(boolean ack) {
+            Ack blockAck = Ack.newBuilder()
+                    .setSuccess(ack)
+                    .build();
+
+            ClientMessage msg = ClientMessage.newBuilder()
+                    .setAck(blockAck)
                     .build();
 
             PersistentSyncClient.this.requestObserver.onNext(msg);
@@ -518,6 +572,9 @@ public class PersistentSyncClient {
             cancelTimeoutMonitoring("Server closed connection");
             System.out.println("Server closed connection");
             connected = false;
+        }
+
+        private record PendingBlock(SyncResult result, long number, byte[] root) {
         }
     }
 }

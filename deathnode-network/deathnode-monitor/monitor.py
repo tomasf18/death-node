@@ -168,7 +168,7 @@ def display_stats():
 
         # Header
         print("=" * 95)
-        print(f"  DeathNode Monitor (Threshold: {BYTE_THRESHOLD} bytes/{TIME_WINDOW}s)")
+        print(f"  DeathNode Monitor (Threshold: {MAX_REQUESTS} sync requests/{TIME_WINDOW}s)")
         print("=" * 95)
         print(f"{'Source IP':<20} {'Packets':<12} {'Bytes':<12} {'Sync':<12} {'Formatted':<12} {'Status':<15}")
         print("-" * 95)

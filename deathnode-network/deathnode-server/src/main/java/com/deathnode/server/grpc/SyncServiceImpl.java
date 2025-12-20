@@ -8,6 +8,7 @@ import com.deathnode.common.grpc.ServerMessage;
 import com.deathnode.common.grpc.Hello;
 import com.deathnode.common.grpc.SignedBufferRoot;
 import com.deathnode.common.grpc.BufferUpload;
+import com.deathnode.common.grpc.Ack;
 import com.deathnode.common.grpc.SyncResult;
 import com.deathnode.server.service.SyncCoordinator;
 import io.grpc.stub.StreamObserver;
@@ -61,11 +62,14 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         @Override
         public void onNext(ClientMessage clientMessage) {
+            System.out.println("Server received: " + clientMessage);
             try {
                 if (clientMessage.hasHello()) {
                     handleHello(clientMessage.getHello());
                 } else if (clientMessage.hasBufferUpload()) {
                     handleBufferUpload(clientMessage.getBufferUpload());
+                } else if (clientMessage.hasAck()) {
+                    handleBlockAck(clientMessage.getAck());
                 } else if (clientMessage.hasError()) {
                     handleError(clientMessage.getError());
                 } else {
@@ -132,6 +136,10 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                 sendError("SUBMIT_FAILED", e.getMessage());
                 responseObserver.onCompleted();
             }
+        }
+
+        private void handleBlockAck(Ack blockAck) {
+            coordinator.receivePeerAck(blockAck.getSuccess());
         }
 
         private void sendSyncResult(SyncCoordinator.SyncResult result) {

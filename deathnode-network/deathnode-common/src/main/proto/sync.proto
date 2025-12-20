@@ -15,7 +15,7 @@ option java_multiple_files = true;
  */
 message Ack {
   bool success = 1;
-  string message = 2;
+  optional string message = 2;
 }
 
 /**
@@ -49,6 +49,13 @@ message BufferUpload {
   
   // Signed Merkle root of the buffer envelopes
   bytes signed_buffer_root = 4;
+}
+
+/**
+ * Client acknowledges a block (or not).
+ */
+message BlockAck {
+  bool ack = 1;
 }
 
 /**
@@ -108,6 +115,13 @@ message SignedBufferRoot {
 }
 
 /**
+ * Server command for clients to commit a block
+ */
+message Commit {
+  bool commit = 1;
+}
+
+/**
  * Server message union.
  */
 message ServerMessage {
@@ -116,6 +130,7 @@ message ServerMessage {
     SyncResult sync_result = 2;
     Ack ack = 3;
     Error error = 4;
+    Commit commit = 5;
   }
 }
 

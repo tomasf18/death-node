@@ -2,8 +2,10 @@ package com.deathnode.server.service;
 
 import com.deathnode.tool.SecureDocumentProtocol;
 import com.deathnode.tool.util.KeyLoader;
+import com.deathnode.common.grpc.*;
 import com.deathnode.common.grpc.RequestBuffer;
 import com.deathnode.common.grpc.SyncResult;
+import com.deathnode.common.grpc.Commit;
 import com.deathnode.common.grpc.ServerMessage;
 import com.deathnode.common.model.Envelope;
 import com.deathnode.common.model.Metadata;
@@ -65,6 +67,7 @@ public class SyncCoordinator {
     @Value("${sync.timeout-ms:5000}")
     private long syncTimeoutMs;
     private SyncRound activeRound = null;
+    private PendingRound pendingRound = null;
 
     public SyncCoordinator(NodeRepository nodeRepository,
                            ReportRepository reportRepository,
@@ -165,16 +168,7 @@ public class SyncCoordinator {
                 .build();
 
         // Broadcast to all registered connections
-        synchronized (roundLock) {
-            for (ClientConnection conn : allConnections.values()) {
-                try {
-                    conn.observer.onNext(msg);
-                    System.out.println("Sent RequestBuffer to node: " + conn.nodeId);
-                } catch (Exception e) {
-                    System.out.println("Failed to send RequestBuffer to " + conn.nodeId + ": " + e.getMessage());
-                }
-            }
-        }
+        broadcast(msg);
     }
 
     /**
@@ -227,7 +221,7 @@ public class SyncCoordinator {
     }
 
     /**
-     * Finalize a round: order envelopes, persist, and return result.
+     * Finalize a round: order envelopes and return result.
      * <p>
      * For now: Simple timestamp-based ordering, no security checks.
      */
@@ -280,50 +274,12 @@ public class SyncCoordinator {
 
         System.out.println("Ordered " + allEnvelopes.size() + " envelopes for round " + round.getRoundId());
 
-        // 3. Persist each envelope to file and database
         List<byte[]> orderedBytes = new ArrayList<>();
-        long nextGlobalSeq = computeNextGlobalSequence();
-
-        for (EnvelopeWithMeta meta : allEnvelopes) {
-            try {
-                // Store file in node-specific directory
-                String filename = meta.hash + ".json";
-                Path filePath = fileStorageService.store(meta.envelopeBytes, filename, meta.signerNode.getNodeId());
-
-                // Update or create NodeSyncState (upsert)
-                NodeSyncState syncState = nodeSyncStateRepository.findByNodeId(meta.signerNode.getNodeId());
-                if (syncState == null) {
-                    syncState = new NodeSyncState();
-                    syncState.setNode(meta.signerNode);
-                    syncState.setNodeId(meta.signerNode.getNodeId());
-                }
-                syncState.setLastSequenceNumber(meta.envelope.getMetadata().getNodeSequenceNumber());
-                syncState.setLastEnvelopeHash(meta.hash);
-
-                // Create DB entity
-                ReportEntity entity = new ReportEntity();
-                entity.setEnvelopeHash(meta.hash);
-                entity.setSignerNode(meta.signerNode);
-                entity.setNodeSequenceNumber(meta.envelope.getMetadata().getNodeSequenceNumber());
-                entity.setGlobalSequenceNumber(nextGlobalSeq++);
-                entity.setMetadataTimestamp(OffsetDateTime.ofInstant(meta.timestamp, ZoneOffset.UTC));
-                entity.setPrevReportHash(meta.envelope.getMetadata().getPrevEnvelopeHash());
-                entity.setFilePath(filePath.toString());
-
-                reportRepository.save(entity);
-                nodeSyncStateRepository.save(syncState);
-
-                orderedBytes.add(meta.envelopeBytes);
-
-                System.out.println(
-                        "Persisted envelope: " + meta.hash + " (global_seq=" + entity.getGlobalSequenceNumber() + ")");
-
-            } catch (Exception e) {
-                System.out.println("Failed to persist envelope " + meta.hash + ": " + e.getMessage());
-            }
+        for (EnvelopeWithMeta envelope : allEnvelopes) {
+            orderedBytes.add(envelope.envelopeBytes);
         }
 
-        // 4. Build result
+        // 3. Build result
         SyncResult result = new SyncResult();
         result.setRoundId(round.getRoundId());
         result.setOrderedEnvelopes(orderedBytes);
@@ -355,14 +311,111 @@ public class SyncCoordinator {
                 HashUtils.bytesToHex(blockRoot),
                 (prevBlockRoot != null) ? HashUtils.bytesToHex(prevBlockRoot) : null
         );
-        signedBlockMerkleRootRepository.save(newSignedBlockMerkleRoot);
+        pendingRound = new PendingRound(allEnvelopes, newSignedBlockMerkleRoot, allConnections.size());
 
-        // 5. Complete the round's future
+        // 4. Complete the round's future
         round.getCompletionFuture().complete(result);
-
-        System.out.println("Round " + round.getRoundId() + " finalized with " + orderedBytes.size() + " envelopes");
-
         return result;
+    }
+
+    /**
+     * Collect acks from clients
+     */
+    public void receivePeerAck(boolean accepted) {
+        if (pendingRound == null)
+            return;
+        if (!accepted) {
+            System.out.println("[!] Block nacked. Clearing pending round...");
+            pendingRound = null;
+            Ack commit = Ack.newBuilder()
+                    .setMessage("commit " + pendingRound.getRoot().getBlockRoot())
+                    .setSuccess(false)
+                    .build();
+
+            ServerMessage msg = ServerMessage.newBuilder()
+                    .setAck(commit)
+                    .build();
+
+            broadcast(msg);
+            return;
+        }
+
+        if (pendingRound.isAcked()) {
+            persistAll();
+
+            Ack commit = Ack.newBuilder()
+                    .setMessage("commit " + pendingRound.getRoot().getBlockRoot())
+                    .setSuccess(true)
+                    .build();
+
+            ServerMessage msg = ServerMessage.newBuilder()
+                    .setAck(commit)
+                    .build();
+
+            broadcast(msg);
+        }
+    }
+
+    private void broadcast(ServerMessage msg) {
+        synchronized (roundLock) {
+            for (ClientConnection conn : allConnections.values()) {
+                try {
+                    conn.observer.onNext(msg);
+                    System.out.println("Sent message to node: " + conn.nodeId);
+                } catch (Exception e) {
+                    System.out.println("Failed to send message to " + conn.nodeId + ": " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    /**
+     * Persist pending round objects.
+     */
+    private void persistAll() {
+        long nextGlobalSeq = computeNextGlobalSequence();
+
+        List<EnvelopeWithMeta> envelopes = pendingRound.getEnvelopes();
+        SignedBlockMerkleRoot root = pendingRound.getRoot();
+
+        for (EnvelopeWithMeta meta : envelopes) {
+            try {
+                // Store file in node-specific directory
+                String filename = meta.hash + ".json";
+                Path filePath = fileStorageService.store(meta.envelopeBytes, filename, meta.signerNode.getNodeId());
+
+                // Update or create NodeSyncState (upsert)
+                NodeSyncState syncState = nodeSyncStateRepository.findByNodeId(meta.signerNode.getNodeId());
+                if (syncState == null) {
+                    syncState = new NodeSyncState();
+                    syncState.setNode(meta.signerNode);
+                    syncState.setNodeId(meta.signerNode.getNodeId());
+                }
+                syncState.setLastSequenceNumber(meta.envelope.getMetadata().getNodeSequenceNumber());
+                syncState.setLastEnvelopeHash(meta.hash);
+
+                // Create DB entity
+                ReportEntity entity = new ReportEntity();
+                entity.setEnvelopeHash(meta.hash);
+                entity.setSignerNode(meta.signerNode);
+                entity.setNodeSequenceNumber(meta.envelope.getMetadata().getNodeSequenceNumber());
+                entity.setGlobalSequenceNumber(nextGlobalSeq++);
+                entity.setMetadataTimestamp(OffsetDateTime.ofInstant(meta.timestamp, ZoneOffset.UTC));
+                entity.setPrevReportHash(meta.envelope.getMetadata().getPrevEnvelopeHash());
+                entity.setFilePath(filePath.toString());
+
+                reportRepository.save(entity);
+                nodeSyncStateRepository.save(syncState);
+
+                System.out.println(
+                        "Persisted envelope: " + meta.hash + " (global_seq=" + entity.getGlobalSequenceNumber() + ")");
+
+                signedBlockMerkleRootRepository.save(root);
+
+            } catch (Exception e) {
+                System.out.println("Failed to persist envelope " + meta.hash + ": " + e.getMessage());
+            }
+        }
     }
 
     public boolean verifyEnvelopeChain(Node node, List<Envelope> envelopes) {
@@ -455,6 +508,31 @@ public class SyncCoordinator {
     }
 
     // ========== Helper Classes ==========
+
+    private static class PendingRound {
+        private final List<EnvelopeWithMeta> envelopes;
+        private final SignedBlockMerkleRoot root;
+        private int acksLeft;
+
+        public PendingRound(List<EnvelopeWithMeta> envelopes, SignedBlockMerkleRoot root, int acksNeeded) {
+            this.envelopes = envelopes;
+            this.root = root;
+            this.acksLeft = acksNeeded;
+        }
+
+        public List<EnvelopeWithMeta> getEnvelopes() {
+            return envelopes;
+        }
+
+        public SignedBlockMerkleRoot getRoot() {
+            return root;
+        }
+
+        public boolean isAcked() {
+            return --acksLeft == 0;
+        }
+
+    }
 
     /**
      * Result of a completed sync round.
