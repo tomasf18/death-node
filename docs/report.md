@@ -49,37 +49,37 @@ In this project, we consider the following trust levels.
 
 #### **Fully Trusted**
 
-* The Certification Authority (CA) that issues and manages cryptographic keys and certificates for network nodes.
+- The Certification Authority (CA) that issues and manages cryptographic keys and certificates for network nodes.
 
 #### **Partially Trusted**
 
-* **Each Client Node:**
+- **Each Client Node:**
   Client nodes are trusted to decrypt and read reports they are authorized to access, but not with preserving global integrity. A compromised client may attempt to:
 
-  * tamper with locally stored encrypted envelopes or metadata,
-  * inject forged or replayed reports,
-  * withhold valid reports or selectively refuse to synchronize.
+  - tamper with locally stored encrypted envelopes or metadata,
+  - inject forged or replayed reports,
+  - withhold valid reports or selectively refuse to synchronize.
 
   The attacker is assumed unable to break cryptographic primitives or forge valid signatures without access to private keys. Integrity verification, per-node chaining, and global consistency checks mitigate these attacks.
 
-* **The Monitor Server:**
+- **The Monitor Server:**
   The monitor server is trusted only to observe synchronization behavior and detect flooding or protocol misuse. It is not trusted with report contents. A compromised monitor may attempt to drop messages, alter metadata, or misreport synchronization state, but cannot forge valid cryptographic commitments verified by clients.
 
 #### **Untrusted**
 
-* **The Network:**
+- **The Network:**
   The communication network is fully untrusted. An attacker may eavesdrop, delay, replay, modify, or inject messages between nodes. All protocol messages are therefore assumed to require confidentiality, integrity and authenticity protection.
 
-* **The Central Server:**
+- **The Central Server:**
   The central server is assumed to be potentially malicious. An attacker controlling it may attempt to:
 
-  * reorder, omit, duplicate, or selectively deliver reports,
-  * tamper with stored metadata or synchronization state,
-  * perform rollback or equivocation attacks across clients.
+  - reorder, omit, duplicate, or selectively deliver reports,
+  - tamper with stored metadata or synchronization state,
+  - perform rollback or equivocation attacks across clients.
 
   The server is assumed incapable of decrypting reports or forging signatures, and all such misbehavior must be detectable by honest clients.
 
-* **The Database Server:**
+- **The Database Server:**
   The database server is untrusted and may be compromised independently. An attacker may attempt to read, modify, delete or roll back metadata entries. Since it stores no plaintext reports and all critical data is integrity-protected, such attacks need to be detectable during verification.
 
 ## **4. Solution Brief**
@@ -99,10 +99,10 @@ This section describes the design rationale and implementation details of the se
 
 ##### **Goals**
 
-* **Confidentiality (SR1):** Only authorized nodes can read report contents. Achieved by encrypting the inner payload with a fresh symmetric Data Encryption Key (DEK) per-report and wrapping that DEK with each recipient's public key.
-* **Integrity & Authenticity (SR2):** Report contents must be tamper-evident and attributable to a signer. Achieved with an Ed25519 digital signature over the canonicalized `(report || metadata)` pair.
-* **Ordering / Missing / Duplicates / Fork detection (SR3, SR4):** Each sender (or client/node) maintains a per-sender monotonic `node_sequence_number` and `prev_envelope_hash` forming a lightweight per-sender hash chain, where peers validate sequence/prev-hash to detect missing, duplicate or out-of-order messages and to detect equivocation. This is used along with Merkle Roots computation to ensure global consistency during synchronization (described in section [5.2](#52-security-protocol-description-synchronization-integrity-and-consistency)).
-* **Performance and security of tools:** Use of well-supported, standard algorithms available in Java’s crypto stack (AES-GCM, RSA-OAEP, Ed25519) to avoid implementing low-level crypto, as required.
+- **Confidentiality (SR1):** Only authorized nodes can read report contents. Achieved by encrypting the inner payload with a fresh symmetric Data Encryption Key (DEK) per-report and wrapping that DEK with each recipient's public key.
+- **Integrity & Authenticity (SR2):** Report contents must be tamper-evident and attributable to a signer. Achieved with an Ed25519 digital signature over the canonicalized `(report || metadata)` pair.
+- **Ordering / Missing / Duplicates / Fork detection (SR3, SR4):*- Each sender (or client/node) maintains a per-sender monotonic `node_sequence_number` and `prev_envelope_hash` forming a lightweight per-sender hash chain, where peers validate sequence/prev-hash to detect missing, duplicate or out-of-order messages and to detect equivocation. This is used along with Merkle Roots computation to ensure global consistency during synchronization (described in section [5.2](#52-security-protocol-description-synchronization-integrity-and-consistency)).
+- **Performance and security of tools:** Use of well-supported, s- ndard algorithms available in Java’s crypto stack (AES-GCM, RSA-OAEP, Ed25519) to avoid implementing low-level crypto, as required.
 
 ##### **High-level message structure (envelope)**
 
@@ -172,51 +172,51 @@ Signatures and hash chains require a deterministic byte representation. We canon
 
 ##### **Algorithms, parameters and choices**
 
-* **Symmetric encryption (AEAD):** AES-256-GCM (12-byte nonce, 128-bit tag). Metadata is used as Associated Authenticated Data (AAD) to bind metadata to content integrity.
-* **Key wrapping:** RSA-OAEP with SHA-256 and MGF1 (`"RSA/ECB/OAEPWithSHA-256AndMGF1Padding"`) to encrypt per-recipient DEKs.
-* **Signatures:** Ed25519 for digital signatures (signing `(report || metadata)`). We don't use any pre-hashing as Ed25519 hashes internally.
-* **Signature bytes included inside the encrypted payload:** This prevents an on-path adversary from reading or replacing signatures, solving signature-swap/impersonation attacks. Also allows the other nodes to authenticate the submitter without decrypting, so as to reject invalid submissions early, before any costly decryption or compromising.
-* **Hashing:** SHA-256 used for `prev_envelope_hash` (hex encoded).
-* **Encoding:** In our current implementation hash fields are encoded as hexadecimal strings via `HashUtils.bytesToHex(...)`, while the remaining (keys, signatures) are base64url encoded.
-* **Key separation:** Each client node and the server have two key pairs: an RSA key pair for confidentiality (DEK wrapping) and an Ed25519 pair for signing. 
+- **Symmetric encryption (AEAD):** AES-256-GCM (12-byte nonce, 128-bit tag). Metadata is used as Associated Authenticated Data (AAD) to bind metadata to content integrity.
+- **Key wrapping:** RSA-OAEP with SHA-256 and MGF1 (`"RSA/ECB/OAEPWithSHA-256AndMGF1Padding"`) to encrypt per-recipient DEKs.
+- **Signatures:** Ed25519 for digital signatures (signing `(report || metadata)`). We don't use any pre-hashing as Ed25519 hashes internally.
+- **Signature bytes included inside the encrypted payload:** This prevents an on-path adversary from reading or replacing signatures, solving signature-swap/impersonation attacks. Also allows the other nodes to authenticate the submitter without decrypting, so as to reject invalid submissions early, before any costly decryption or compromising.
+- **Hashing:** SHA-256 used for `prev_envelope_hash` (hex encoded).
+- **Encoding:** In our current implementation hash fields are encoded as hexadecimal strings via `HashUtils.bytesToHex(...)`, while the remaining (keys, signatures) are base64url encoded.
+- **Key separation:** Each client node and the server have two key pairs: an RSA key pair for confidentiality (DEK wrapping) and an Ed25519 pair for signing. 
 
 ##### **Why these choices are effective**
 
-* AEAD provides confidentiality and integrity in one primitive, and AES-GCM is widely available and efficient for this **(add the source)**. Binding metadata as AAD ensures metadata or ciphertext cannot be changed without detection. This is because GCM produces an authentication tag that covers both the ciphertext and the AAD, so any modification to either will result in decryption failure as the tag will not match.
-* RSA-OAEP with SHA-256 is a efficient way to wrap symmetric keys for a set of recipients, as RSA is performant for small data like keys. **(add the source)**
-* The ideal GCM tag size is typically 128 bits (16 bytes) for strong security and broad compatibility **(add the source)**.
+- AEAD provides confidentiality and integrity in one primitive, and AES-GCM is widely available and efficient for this **(add the source)**. Binding metadata as AAD ensures metadata or ciphertext cannot be changed without detection. This is because GCM produces an authentication tag that covers both the ciphertext and the AAD, so any modification to either will result in decryption failure as the tag will not match.
+- RSA-OAEP with SHA-256 is a efficient way to wrap symmetric keys for a set of recipients, as RSA is performant for small data like keys. **(add the source)**
+- The ideal GCM tag size is typically 128 bits (16 bytes) for strong security and broad compatibility **(add the source)**.
 GCM runs CTR internally which requires a 16-byte counter. The IV provides 12 of those, the other 4 are an actual block-wise counter. If we supply a larger-than-12-bytes IV then it needs to be hashed allowing collisions to happen and raising the risk for IV reuse unneccessarily high.
-* Ed25519 is used for signatures because it is fast, small, and standardized for signatures (not good, however, for encryption). This was chosen over ECDSA due to its stronger security guarantees and safer design **(add the source)**.
-* Signing and encryption address different security properties. Using separate keys avoids cross-protocol attacks and follows standard cryptographic practice (e.g., TLS, PGP, Signal), ensuring that compromising one key does not compromise the other security properties, which increases overall system robustness. **(add the source)**
-* The per-sender sequence number plus the prev-hash is simple and efficient to detect missing, duplicate or forked sequences in a synced peer network where a full consensus protocol would be overkill.
+- Ed25519 is used for signatures because it is fast, small, and standardized for signatures (not good, however, for encryption). This was chosen over ECDSA due to its stronger security guarantees and safer design **(add the source)**.
+- Signing and encryption address different security properties. Using separate keys avoids cross-protocol attacks and follows standard cryptographic practice (e.g., TLS, PGP, Signal), ensuring that compromising one key does not compromise the other security properties, which increases overall system robustness. **(add the source)**
+- The per-sender sequence number plus the prev-hash is simple and efficient to detect missing, duplicate or forked sequences in a synced peer network where a full consensus protocol would be overkill.
 
 #### **5.1.2 Implementation & Technologies**
 
 ##### **API summary**
 
-* `protect(report, metadata, recipientPubKeys, signerPrivKey)` - outputs the Envelope  
+- `protect(report, metadata, recipientPubKeys, signerPrivKey)` - outputs the Envelope  
   Produces an envelope with encrypted report payload and a set of wrapped DEKs for recipients.
 
-* `check(envelope)` - outputs { valid: boolean, reasons: [String] }  
+- `check(envelope)` - outputs { valid: boolean, reasons: [String] }  
   Performs structural and semantic validation of the envelope. 
 
-* `unprotect(envelope, recipientPrivKey, recipientNodeId, senderPubKey)` - outputs the Report  
+- `unprotect(envelope, recipientPrivKey, recipientNodeId, senderPubKey)` - outputs the Report  
   Unwraps DEK for `recipientNodeId`, decrypts AES-GCM payload (AAD = metadata) and verifies Ed25519 signature. Throws `SecurityException` on AEAD failure or signature failure.
 
 ##### **Implementation details**
 
-* **Programming language:** Java 21
-* **Cryptographic libraries:** Java Cryptography Architecture (JCA).
-* **Canonical JSON:** The code calls `canonicalJson(...)` on `JsonObject`s and then uses the resulting bytes as the canonical representation for signatures and AEAD AAD. 
-* **Signing:** `signDataHex(payload, signerPrivKey)` signs `(report || metadata)` using `Signature.getInstance("Ed25519")` and produces a hex string.
-* **Inner payload & encryption:** The `report` and `signature` are serialized to JSON and encrypted as the AEAD plaintext using AES-256-GCM. The metadata bytes are supplied to `Cipher.updateAAD(...)` before `doFinal(...)`.
-* **DEK generation & wrapping:** A fresh AES key is generated for each envelope (`KeyGenerator.getInstance("AES"); kgen.init(256)`) and then wrapped individually for every recipient using RSA-OAEP (`Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")`).
-* **Encoding:** The implementation uses hex encoding (via `HashUtils.bytesToHex`) for nonce, ciphertext, tag and wrapped keys as stored in `Envelope`. The envelope JSON contains `metadata`, `key_encrypted`, and `report_encrypted` sections.
-* **check() behavior:** `check()` verifies presence and basic format rules for:
+- **Programming language:** Java 21
+- **Cryptographic libraries:** Java Cryptography Architecture (JCA).
+- **Canonical JSON:** The code calls `canonicalJson(...)` on `JsonObject`s and then uses the resulting bytes as the canonical representation for signatures and AEAD AAD. 
+- **Signing:** `signDataHex(payload, signerPrivKey)` signs `(report || metadata)` using `Signature.getInstance("Ed25519")` and produces a hex string.
+- **Inner payload & encryption:** The `report` and `signature` are serialized to JSON and encrypted as the AEAD plaintext using AES-256-GCM. The metadata bytes are supplied to `Cipher.updateAAD(...)` before `doFinal(...)`.
+- **DEK generation & wrapping:** A fresh AES key is generated for each envelope (`KeyGenerator.getInstance("AES"); kgen.init(256)`) and then wrapped individually for every recipient using RSA-OAEP (`Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")`).
+- **Encoding:** The implementation uses hex encoding (via `HashUtils.bytesToHex`) for nonce, ciphertext, tag and wrapped keys as stored in `Envelope`. The envelope JSON contains `metadata`, `key_encrypted`, and `report_encrypted` sections.
+- **check() behavior:** `check()` verifies presence and basic format rules for:
 
-  * `metadata` fields (presence, timestamp parsing, if `signerAlg` is `Ed25519`, non-negative sequence number),
-  * `key_encrypted` (algorithm string equals `"RSA-OAEP-SHA256"`, non-empty recipient key list, each entry has `node` and `encrypted_key`),
-  * `report_encrypted` (algorithm `"AES-256-GCM"`, presence of `nonce`, `ciphertext`, `tag`).  
+  - `metadata` fields (presence, timestamp parsing, if `signerAlg` is `Ed25519`, non-negative sequence number),
+  - `key_encrypted` (algorithm string equals `"RSA-OAEP-SHA256"`, non-empty recipient key list, each entry has `node` and `encrypted_key`),
+  - `report_encrypted` (algorithm `"AES-256-GCM"`, presence of `nonce`, `ciphertext`, `tag`).  
     `check()` intentionally does not perform cryptographic verification (unwrapping DEK or signature verification) because those require secret keys.    
     It is a fast structural validation intended to detect malformed or obviously invalid envelopes before attempting expensive crypto ops.
 
@@ -573,7 +573,7 @@ All cryptographic material is generated using an automated script (`generate-all
 3. **For the server**:
    - Generates user-level key pairs (Ed25519 + RSA-2048)
    - Generates gRPC server TLS certificate with CN=`deathnode-server` and SANs for all deployment scenarios
-   - **Additionally** generates a separate PostgreSQL client certificate with CN=`dn_admin`
+   - Additionally generates a separate PostgreSQL client certificate with CN=`dn_admin`
    - Converts the PostgreSQL client private key to **PKCS#8 DER format** (`.pk8`) for JDBC compatibility
    - Creates Java Keystore for user-level keys
 
@@ -582,12 +582,12 @@ All cryptographic material is generated using an automated script (`generate-all
    - Creates certificate with CN=`deathnode-database`
    - Configures permissions (PostgreSQL requires key file to be owned by UID 999 with mode 600)
 
-**Key distribution**:
-- **CA certificate**: Distributed to all entities (public, can be freely shared)
-- **CA private key**: Never distributed, it is supposed to be kept secure on the deployment machine
-- **Entity private keys**: Stored locally on each node, never transmitted (Java Keystore files)
-- **Entity certificates**: Public, stored alongside private keys but can be shared
-- **Public keys** (user-level): Stored in database tables (`nodes.sign_pub_key`, `nodes.enc_pub_key`) and distributed manually at deployment time
+Key distribution:
+- **CA certificate** - Distributed to all entities (public, can be freely shared)
+- **CA private key** - Never distributed, it is supposed to be kept secure on the deployment machine
+- **Entity private keys** - Stored locally on each node, never transmitted (Java Keystore files)
+- **Entity certificates** - Public, stored alongside private keys but can be shared
+- **Public keys** (user-level) - Stored in database tables (`nodes.sign_pub_key`, `nodes.enc_pub_key`) and distributed manually at deployment time
 
 At deployment time:
 1. Run `generate-all-keys.sh ca` to create the root CA
