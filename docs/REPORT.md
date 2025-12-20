@@ -1,4 +1,4 @@
-# CXX DeathNode / ChainOfProduct / CivicEcho Project Report
+# A53 DeathNode Project Report
 
 ## **1. Introduction**
 
@@ -60,7 +60,7 @@ In this project, we consider the following trust levels.
 
   - tamper with locally stored encrypted envelopes or metadata,
   - inject forged or replayed reports,
-  - withhold valid reports or selectively refuse to synchronize.
+  - hold valid reports or selectively refuse to synchronize.
 
   The attacker is assumed unable to break cryptographic primitives or forge valid signatures without access to private keys. Integrity verification, per-node chaining, and global consistency checks mitigate these attacks.
 
@@ -86,8 +86,11 @@ In this project, we consider the following trust levels.
 
 ## **4. Solution Brief**
 
-**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!! (_Brief solution description_)**
-(IS THIS NECESSARY?)
+The system consists of multiple Nodes connected over a network to a central Server using secure sockets (TLS). Each Node locally generates reports, which are temporarily stored in a local encrypted buffer using an ephemeral key.
+
+Once a Node reaches a predefined threshold of reports, it initiates a sync request to the Server. The Server then queries all Nodes, including the requesting one, to collect their buffered reports. It merges and sorts all received reports based on the timestamp in the metadata and sends back the ordered list to all Nodes. Internally, the Server also stores a permanent copy of the reports in its database.
+
+After this synchronization process, all Nodes have access to the same complete and ordered list of reports, ensuring consistency across the network while maintaining confidentiality and integrity during transmission.
  
 ## **5. Project Development**
 
@@ -130,7 +133,7 @@ An envelope contains three top-level sections:
     "key_per_node": [
         {"node": "self", "encrypted_key": "b64url(...)"},
         {"node": "nodeB", "encrypted_key": "b64url(...)"},
-        {"node": "nodeC", "encrypted_key": "b64url(...)"},
+        {"node": "nodeC", "encrypted_key": "b64url(...)"}
     ]
   },
 
@@ -448,18 +451,94 @@ Private keys are stored using **Java KeyStore (JKS)** on each node. JKS provides
 
 #### **5.5.1 Network and Machine Setup**
 
-**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!!**
-
 ![](../resources/img/Network_Diagram.png)
 
-6.2. Firewall rules
-6.3. Justification of the chosen infrastructure
+#### **5.5.2 Firewall rules**
 
-(_Provide a brief description of the built infrastructure._)
+To secure the network and control traffic between the server, database, monitor, and nodes, we use `iptables`,
+which allows fine-grained control over incoming, outgoing, and forwarded packets, ensuring that only authorized communications are permitted.
 
-(_Justify the choice of technologies for each server._)
+**Server Firewall:**
 
-#### **5.5.2 Communication Security**
+- **Default Policies:**
+  - `INPUT DROP`: Blocks all incoming connections by default. 
+  - `OUTPUT ACCEPT`: Allows all outgoing connections. 
+  - `FORWARD DROP`: The server does not forward traffic between networks.
+
+- **Loopback**: Allows internal communication on lo.
+
+- **Application-specific Rules:**
+  - **Port 9090:** Only accepts TCP connections from the monitor ($GATEWAY). This ensures that node nodes cannot directly reach the server except through the monitor. 
+  - **Database Communication:** Allows the server to connect to the DB ($DB_IP:5432) and receive responses.
+
+These rules enforce the least privilege, allowing only essential communications while preventing unauthorized access from client nodes or external hosts.
+
+**Database Firewall**
+
+- **Default Policies:**
+  - `INPUT DROP`: Blocks all unsolicited incoming traffic. 
+  - ` OUTPUT ACCEPT`: Allows the DB to respond to queries. 
+  - `FORWARD ACCEPT`: Strict rules of the docker host container that needed to be follow in order to correct execution of docker.
+
+- **Loopback**: Allows internal Docker operations.
+
+- **Server-specific Rules:**
+  - Accepts connections only from the server IP on port `5432`. This ensures **only the server** can query or write data to the database, preventing any client from connecting directly.
+
+This design isolates the DB and prevents unauthorized access while allowing the server to persist reports securely.
+
+**Monitor Firewall**
+
+The monitor acts as a gateway and security checkpoint between nodes and the server:
+
+- **IP Forwarding:** Enabled (net.ipv4.ip_forward=1) so that traffic from nodes can reach the server.
+
+- **Default Policies:**
+  - `INPUT DROP`, `OUTPUT ACCEPT`,`FORWARD DROP`: Stops unwanted traffic while allowing essential forwarding through explicit rules.
+
+- **NAT (Masquerading):**
+  - **Postrouting masquerade** on `eth0` ensures that nodes’ traffic is NATed so the server sees it coming from the monitor.
+  This avoids conflicts from the server iptables rules.
+
+- **Forwarding Rules:**
+  - Only allows forwarding between the server interface (eth0) and each node interface (eth1 and eth2) . 
+
+The monitor rules enforce network segmentation and controlled access, acting as a vigilant security node that protects the server and ensures all client traffic is supervised.
+
+#### 5.5.3 Justification of the chosen infrastructure
+
+The infrastructure was designed to provide a secure, controlled, and modular environment for the Deathnode project.
+It consists of three main components: the **server**, the **database**, and multiple **nodes**, all connected via a **monitor** acting as a network gateway. 
+Each component has a well-defined role and network segment to ensure isolation and security of communications.
+
+1. **Server:**
+    
+    The server acts as the central authority it exposes a single secure port for communication with clients and the monitor (`9090`),
+    minimizing the attack surface. By isolating the server in its own subnet and restricting traffic via iptables, we ensure that only authorized nodes can interact with it.
+
+2. **Database:**
+
+   The database is located on a separate VM and in the same subnet of the server. 
+   This separation enforces the principle of the least privilege: even if a node or monitor is compromised, direct access to sensitive data is prevented.
+   The server connects to the database using SSL/TLS with mutual authentication to guarantee confidentiality and integrity of data in transit.
+
+3. **Monitor:** 
+  
+    The monitor serves as a network gateway between nodes and the server, forwarding packets while enforcing network policies and performing NAT. 
+    Each node is assigned its own subnet, allowing the monitor to manage traffic and apply forwarding rules to prevent unauthorized access.
+    The monitor also simplifies the topology, enabling more easily observe the node packets 
+
+4. **Nodes:**
+
+    Nodes operate in isolated subnets and communicate with the server via the monitor (gateway) using secure sockets.
+
+5. **Security Considerations:**
+   - **Isolation:** Each network segment is isolated to minimize lateral movement in case of compromise. 
+   - **Mutual Authentication:** SSL/TLS with node authentication ensures that only trusted nodes can communicate. 
+   - **Firewall Rules:** iptables on each VM enforce strict access control, permitting only necessary traffic. 
+   - **Forwarding and NAT:** The monitor performs controlled packet forwarding and NAT to allow multiple nodes to share a single route to the server while maintaining isolation.
+
+#### **5.5.4 Communication Security**
 
 All network communications in the DeathNode system are protected using **Transport Layer Security (TLS 1.3)** with **mutual authentication (mTLS)**, ensuring that both parties in every connection verify each other's identity before exchanging data. This provides confidentiality, integrity and authenticity at the transport layer, complementing the end-to-end security guarantees of the secure document format.
 

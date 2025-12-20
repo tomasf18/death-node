@@ -16,27 +16,28 @@
 This repository contains documentation and source code for the *Network and Computer Security (SIRS)* project scenario **DeathNode**.
 
 The [REPORT](./docs/REPORT.md) document provides a detailed overview of the key technical decisions and various components of the implemented project.
-It offers insights into the rationale behind these choices, the project's architecture, and the impact of these decisions on the overall functionality and performance of the system.
+It offers insights into the rationale behind these choices, the project's architecture, and the impact of these decisions
+on the overall functionality and performance of the system.
 
 This document presents installation and demonstration instructions.
 
 All virtual machines are based on Debian 64-bit Linux, and the software stack includes:
-- **Java 17+** and **Maven 3.x** for building and running the server and client applications. 
+- **Java 17+** and **Maven 3.x** for building and running the server and nodes applications. 
 - **Docker** for running the **PostgreSQL** database container.
 - **Python3** for the monitor to sniff packets. 
-- **iptables** for configuring firewall rules and network forwarding between the server, clients, and monitor. 
+- **iptables** for configuring firewall rules and network forwarding between server, nodes, and monitor. 
 - **Boot scripts** (`boot-config.sh`) for each machine, which configure static IP addresses, subnets, 
 and firewall rules specific to each role (server, database, monitor).
 
 ## Installation
 
-To see the project in action, it is necessary to setup a virtual environment, with 3 networks (sw0, sw1, sw2) and 5 machines:   
+To see the project in action, it is necessary to set up a virtual environment, with 3 networks (sw0, sw1, sw2) and 5 machines:   
 - Main server (sw0);
 - Database (sw0);
 - Monitor (sw0, sw1 and sw2);
 - 2 clients (sw1 and sw2, one for each client).
 
-The following diagram shows the networks and machines:
+#### The following diagram shows the networks and machines:
 
 ![](resources/img/Network_Diagram.png)
 
@@ -76,7 +77,7 @@ chmod +x requirements.sh
 ./requirements.sh
 ```
 
-Verify installations:
+Verify the installations:
 ```sh
 java -version
 mvn -version
@@ -91,17 +92,17 @@ mvn clean install
 
 **Once the base virtual machine is fully configured:**
 1. Power off the VM
-2. Clone it, following this [instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#21-clone-virtual-machines), to create the remaining machines:
+2. Clone it, following these [instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#21-clone-virtual-machines), to create the remaining machines:
    - **Server**
    - **Database**
    - **Monitor**
-   - **Client1**
-   - **Client2**
+   - **NodeA**
+   - **NodeB**
 3. After cloning, update each network configuration using these [instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#22a-virtualbox), and follow these requirements:
     - **Server and Database**: one adapter for `sw0`
     - **Monitor**: three adaptares, first for `sw0`, second for `sw1` and third for `sw2`
-    - **Client1**: one adapter for `sw1`
-    - **Client2**: one adapter for `sw2`
+    - **NodeA**: one adapter for `sw1`
+    - **NodeB**: one adapter for `sw2`
 
 ## Machine configurations
 
@@ -119,12 +120,12 @@ This machine runs a PostgreSQL 18.0 database server inside a Docker container.
 
 Run the boot script inside the `deathnode-database/` folder:
 ```sh
+cd deathnode-database
 sudo ./boot-config.sh
 ```
 
 Run the container:
 ```sh
-cd deathnode-database
 sudo ./setup-db.sh
 ```
 
@@ -133,23 +134,24 @@ To verify if the container is running:
 sudo docker ps
 ```
 
-Apply Database Schema:
-```sh
-psql -h localhost -U dn_admin -d deathnode -f server_schema.sql
-```
-> Password for user dn_admin: dn_pass
-
 The expected results are:
-- You see the list of databases, including `deathnode`.
 - No connection errors.
+- Container running with postgreSQL:18
 
 ### Machine 2 - Server
 This machine runs the Deathnode application server using Spring Boot.
 
 Run the boot script inside the `deathnode-server/` folder:
 ```sh
+cd deathnode-server
 sudo ./boot-config.sh
 ```
+
+Try to communicate with the DB server and apply Database Schema:
+```sh
+psql -h 192.168.0.200 -U dn_admin -d deathnode -f ../deathnode-database/server_schema.sql
+```
+> Password for user dn_admin: dn_pass
 
 Initialize Application Server:
 ```sh
@@ -162,7 +164,7 @@ The expected results are:
 
 ### Machine 3 - Monitor
 These machine run the monitor server, which serve as IDS and router at same time, to route packets 
-from clients to the server and prevent spam attacks.
+from nodes to the server and prevent spam attacks.
 
 The initialization is the same, run the file `boot-config` in the folder `deathnode-monitor`:
 ```sh
@@ -176,84 +178,130 @@ python3 monitor.py
 ```
 
 The expected results are:
-- Command line interface capturing all the traffic between the client and the server.
+- Command line interface capturing all the traffic between the nodes and the server.
 
-### Machine 4, 5 - Clients
-These machines run the Deathnode clients, which communicate with the server.
+### Machine 4, 5 - Nodes
+These machines run the DeathNode nodes, which communicate with the server.
 The initialization is mostly the same; the only difference is the boot script used:
-- **Client1** uses `boot1-config.sh`
-- **Client2** uses `boot2-config.sh`
+- **NodeA** uses `boot1-config.sh`
+- **NodeB** uses `boot2-config.sh`
 
-Initialize, run the respective boot script on each client inside th `deathnode-client/` folder:
+Initialize, run the respective boot script on each client inside the `deathnode-client/` folder:
 ```sh
+cd deathnode-client
 sudo ./boot1-config.sh   # for Client 1
 sudo ./boot2-config.sh   # for Client 2
 ```
 
 Inside the client project directory run the client JAR with the appropriate arguments:
 ```sh
-cd deathnode-client/
-java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"   # Client 1
-java -jar target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"    # Client 2
+java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"   # Node 1
+java -jar target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"    # Node 2
 ```
 
 The expected results are:
 - Each client starts and registers itself with the server.
 - No connection errors should appear in the console.
-- Client can use the commands `create-reports` and most important sync them with the server using `sync` command
+- Client can use the commands `create-reports` and most important sync them with the server using the `sync` command
 
 ## Demonstration
 
 Now that all networks and virtual machines are correctly configured and running, this section demonstrates the main features 
-of the Deathnode system and highlights the security mechanisms in action.
+of the DeathNode system and highlights the security mechanisms in action.
 
 All commands in this demonstration are executed on a client machine, while screenshots are provided to show the
 corresponding outputs on the server and on the monitor (vigilant).
 
-### Client Application Overview
-The client application provides an interactive command-line interface. It can be launched as follows:
+### Node Application Overview
+The node application provides an interactive command-line interface. It can be launched as follows:
 
 ```sh
 cd deathnode-client/
 java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
 ```
-Upon startup, the client connects to the server through the monitor and waits for user commands.
+Upon startup, the node connects to the server through the monitor and waits for user commands.
 
 <p align="center">
-  <img src="resources/img/server_init.png" width="35%" />
-  <img src="resources/img/client_init.png" width="40%" />
+  <img src="resources/img/server_init.png" width="25%" style="margin-right: 5rem"/>
+  <img src="resources/img/node-init.png" width="30%" />
 </p>
 <p align="center">
-  <em>Server with the client connection (left) and client with cli connected successfully with the server (right)</em>
+     <img src="resources/img/monitor-init.png" width="35%" />
+</p>
+<p align="center">
+  <em>Server with the client connection (left) and NodeA connected successfully with the Server (right) <br>This monitor displays the first sync request from Node A during its initial connection to the server (bottom
+</em>
 </p>
 
-### Help Command
-The `help` command lists all available client operations.
-
-<p align="center">
-  <img src="resources/img/client_help.png" width="50%" />
-</p>
-<p align="center">
-  <em>The client prints the list of supported commands and their usage.</em>
-</p>
 
 ### Creating a Report
-The `create-report` command allows a client to create a new report providing:
+The `create-report` command allows a node to create a new report providing:
 `Suspect`; `Description` and `Location`. After the envelope is created and stored in buffer, outputting the name and the
 local seq number
 
 <p align="center">
-  <img src="resources/img/create-report.png" width="100%" />
+  <img src="resources/img/create-report.png" width="50%" />
 </p>
 <p align="center">
   <em>The client prints the created report</em>
 </p>
 
+After the threshold is achieved of the buffer size, the sync is requested from the NodeA and the server initiate the `sync round` for all Nodes in the network, if no other round is active.
+<p align="center">
+  <img src="resources/img/node-trigger-sync.png" width="35%" style="margin-right: 5rem"/>
+  <img src="resources/img/server-sync-round.png" width="40%" />
+</p>
+<p align="center">
+     <img src="resources/img/wire-syncRequest.png" width="50%" />
+</p>
+<p align="center">
+  <em>The NodeA triggers the sync process and subsequently receives the ordered report from the server (left) and the server receives the sync request, processes it correctly, and sends a response back to the NodeA. (right)<br>
+The Wireshark application shows the packet capture during sync, demonstrating that the communication is encrypted using TLS and that the content is not disclosed (bottom)
+</em>
+</p>
+
+Listing the reports, using the command `list-reports` we can see if the report is sync with the server and with the others Nodes,
+by verifying the `global_seq` attribute:
+<p align="center">
+  <img src="resources/img/list-reports.png" width="60%" />
+</p>
+
+
 ### Creating Random Reports (Simulated Flood)
 The `create-random` command generates multiple reports automatically. This command is used to simulate abusive
 behavior and trigger the security mechanisms. The command asks for one input, the number of reports to generate.
 
+<p align="center">
+   <img src="resources/img/create-random.png" width="40%" style="margin-right: 5rem"/>
+   <img src="resources/img/monitor-block-Node.png" width="40%" />
+</p>
+<p align="center">
+<em>The NodeA is using an abusive command and sending multiple synchronization requests in a spam-like manner. (left)<br>
+The monitor blocks the Node's requests and adds a temporary firewall rule to drop packets from the abusive Node.
+If the abusive behavior continues after the timeout, the duration of the blocking rule is progressively increased (right)
+</em>
+</p>
 
+### Security measures
+One of the most important requirements in our system is information integrity, and order. With the development of our Secure Document Tool,
+whenever any byte of information is modified, the other nodes are able to detect that the integrity has been compromised.
+
+When we change, for example, the `report_id` in the `metadata` and attempt to sync with the server,
+the synchronization proceeds normally, but the other nodes can detect that the report is invalid.
+
+<p align="center">
+   <img src="resources/img/report-modified.png" width="45%" style="margin-right: 2rem"/>
+   <img src="resources/img/integrity.png" width="50%" />
+</p>
+<p align="center">
+<em>The unaltered report, where we will change only the report_id or another attribute. (left)
+and when performing list-reports, a hash mismatch error is displayed. (right)</em>
+</p>
+
+In addition to integrity, we also demonstrate how the nodes can detect `if the order of reports has been altered` and cancel the corresponding synchronization round.
+<p align="center">
+  <img src="resources/img/error-order.png" width="60%" />
+</p>
 
 This concludes the demonstration.
 
@@ -261,19 +309,13 @@ This concludes the demonstration.
 
 ### Links to Used Tools and Libraries
 
-- [Java 11.0.16.1](https://openjdk.java.net/)
+- [Java 21.0](https://openjdk.org/projects/jdk/21/)
 - [Maven 3.9.5](https://maven.apache.org/)
-- ...
-
-### Versioning
-
-We use [SemVer](http://semver.org/) for versioning.  
-
-### License
-
-This project is licensed under the MIT License - see the [LICENSE.txt](LICENSE.txt) for details.
-
-*(switch to another license, or no license, as you see fit)*
+- [Python 3.14.2](https://docs.python.org/3/)
+- [Java Security](https://docs.oracle.com/en/java/javase/25/security/java-security-overview1.html)
+- [Virtual Box](https://www.virtualbox.org/)
+- [Docker](https://docs.docker.com/)
+- [PostgreSQL 18.0](https://www.postgresql.org/docs/18/index.html)
 
 ----
 END OF README
