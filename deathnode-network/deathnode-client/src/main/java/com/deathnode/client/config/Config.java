@@ -52,6 +52,10 @@ public class Config {
         return NODE_PSEUDONYM != null ? NODE_PSEUDONYM : "default_node";
     }
 
+    public static String getRandomReportsFilePath() {
+        return "client-data/reports.json";
+    }
+
     public static String getEnvelopesDir() {
         return "client-data/" + NODE_SELF_ID + "/envelopes/";
     }

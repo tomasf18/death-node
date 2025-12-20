@@ -73,7 +73,7 @@ public class ClientService {
         }.getType();
 
         List<Report> reports;
-        try (FileReader reader = new FileReader("reports.json")) {
+        try (FileReader reader = new FileReader(Config.getRandomReportsFilePath())) {
             reports = gson.fromJson(reader, listType);
         }
 
