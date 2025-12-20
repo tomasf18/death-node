@@ -70,6 +70,12 @@ java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
 cd deathnode-client/
 java -jar target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"
 ```
+
+### 7. Run monitor
+```bash
+cd deathnode-monitor/
+sudo python3 monitor.py
+```
 ---
 
 ## How to run from scratch
@@ -190,6 +196,11 @@ mvn spring-boot:run
 java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
 ```
 
+### 8. Run monitor
+```bash
+cd deathnode-monitor/
+sudo python3 monitor.py
+```
 ---
 
 ## Configuration

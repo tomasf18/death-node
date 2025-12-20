@@ -29,7 +29,9 @@ Given the scenario requirements and our architectural interpretation, this proje
 These objectives collectively ensure that the reporting platform remains trustworthy, resilient and operational even under adversarial conditions, while preserving the pseudonymous nature of participant interactions.
 
 ## **3. Assumptions**
-**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!!**
+
+> ### Disclaimer
+> We thought of DeathNode as a service where members of the cult can share small collections of reports instead of (solely) single posts, assuming it to lean more towards a distributed report repository rather than a thread-like social platform. This way we improve the general purpose and interest of the solution to compensate for the low number of member nodes.
 
 The DeathNode network follows a centralized synchronization model in which all nodes exchange reports through a central server. This server is responsible solely for coordinating synchronization and ordering and is **not trusted** with access to report contents. All reports are encrypted end-to-end and remain confidential to authorized client nodes at all times.
 
@@ -414,27 +416,25 @@ Hash operations:
 
 ### **5.3 Security Challenge**
 
-**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!!**
-
-The fact that the reports are anonymous, could easily lead to attacks where users flood the network with fake reports, trying to harden the system and make it unusable for legitimate users. With this in mind, we decided that Challenge B would be the most interesting one to tackle, as it requires us to design a solution that resists such attacks. 
+If a node were to be compromised due to an attack, one possible threat could be the mass creation of reports to stress the system. Bearing this, we found challenge B the most fit for a more robust final solution, playing an important role in security for the system.
 
 #### **5.3.1 Solution Design**
 
-**!!!!!!!!!!!!!!!!!!   TODO   !!!!!!!!!!!!!!!!!!**
-
-**(_Describe the new requirements introduced in the security challenge and how they impacted your original design._)
-(_Explain how your team redesigned or extended the solution to meet the security challenge, including key distribution and other security measures._)**
-
 This security challenge required us to introduce a new entity in the system: the monitor server. This server is responsible for observing network activity and detecting flooding attacks from misbehaving nodes. As it is possible to observe in the network architecture diagram in [5.5.1](#551-network-and-machine-setup), we leveraged the fact that we needed a gateway from each client network to the central server, and vice versa, to place the monitor server in between them. This way, all client-server communications pass through the monitor, allowing it to effectively monitor traffic and identify potential flooding attacks.
 
-We also leveraged the fact that each client keeps an in memory strucure (buffer, or more simple, a list with the unsynced reports), and that it uses it to decide when to send Sync requests to the server (fixed-size messages), when the buffer reaches a certain size. This means that a misbehaving client that wants to flood the network with fake reports, would have to send a lot of Sync requests to the server in a short period of time, as each Sync request can only carry a limited number of reports.
+We also leveraged the fact that each client keeps an in-memory structure (buffer, or more simple, a list with the unsynced reports), and that it uses it to decide when to send Sync requests to the server (fixed-size messages), when the buffer reaches a certain size. This means that a misbehaving client that wants to flood the network with fake reports would have to send a lot of Sync requests to the server in a short period of time, as each Sync request can only carry a limited number of reports.
+
+If a client sends a second synchronization request within a 30-second window, it is blocked for 30 seconds. With every block, the timeout doubles.
+
+The client handles timeouts by simply clearing their buffer, considering itself to be abusive or possibly compromised.
 
 #### **5.3.2 Implementation & Technologies**
 
-This monitor server was implemented using **Python**.
-It listens for incoming connections from client nodes to the central server, using the packet size to detect Sync requests. With this detection, it is able to count how many Sync requests each client sends in a given time window (e.g., per minute). If a client exceeds a predefined threshold of Sync requests within that time window, the monitor server flags the client as misbehaving and blocks its further communications to the central server. This is implemented by simply dropping any packets from the misbehaving client, thus not forwarding them to the central server. This block is not permanent, as after a certain timeout period, the monitor server will unblock the client and allow it to communicate with the central server again.
+This monitor server was implemented using the **Scapy** library in **Python**. It sniffs two interfaces `eth1` and `eth2` — one for each client — and keeps track of metrics (bytes, number of packets, sync requests) in a 30-second window.
 
-As the monitor server is only able to detect that a client is flooding the network with when the first Sync that exceeds the threshold is received, it allways blocks the client from that point on. Thus, when the server then request all the buffers from all connected clients, it is configured to timeout when a client is taking too long to respond, and then just ignores that client for that synchronization round. On the client side, when responding with the requested buffer, after the block, this message is dropped and the client does not receive any response from the server, so it is also configured to timeout after a certain period of time waiting for the server response. If this timeout is reached, the client is assumed compromised and drops all the reports in its buffer, rolling back its state to the last successful synchronization.
+As it's static, the packet size is used to detect Sync requests. With this detection, it keeps count of how many Sync requests each client sends in a time window. When flooding is detected, the monitor server flags the client as misbehaving and blocks its further communications to the central server. This is enforced by adding a new `iptables` rule to drop incoming packets from such client, thus not forwarding them to the central server. This block is not permanent, as after a timeout period, the monitor server will delete the previously created firewall rule and allow the client to communicate with the central server again.
+
+The implementation avoids dependencies with the rest of the system, making it highly dynamic. It can be started and stopped at any time, without interrupting the system.
 
 ### **5.4 Storage**
 

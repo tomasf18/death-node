@@ -1,8 +1,4 @@
 #!/usr/bin/env python3
-"""
-Network Rate Limiter - Gateway Protection
-Blocks sources that exceed packet rate threshold
-"""
 
 from scapy.all import sniff, IP
 from collections import defaultdict, deque
@@ -16,7 +12,7 @@ import subprocess
 TIME_WINDOW = 30  # seconds
 BYTE_THRESHOLD = 20000  # bytes per TIME_WINDOW
 MAX_REQUESTS = 2 # max allowed sync requests per TIME_WINDOW
-BLOCK_DURATION = 30  # seconds to block
+BLOCK_DURATION = {1 : 30, 2 : 30}  # seconds to block
 INTERFACES = ['eth1','eth2']
 
 # Statistics storage
@@ -39,7 +35,14 @@ def block_ip(ip_address):
         if ip_address in blocked_ips:
             return  # Already blocked
 
-        blocked_ips[ip_address] = time.time() + BLOCK_DURATION
+        # ip is formed X.X.index.100
+        interface = int(ip_address.split(".")[-2])
+        if interface not in BLOCK_DURATION:
+            return  # Invalid index, do not block
+
+        duration = BLOCK_DURATION[interface]
+        blocked_ips[ip_address] = time.time() + duration
+        BLOCK_DURATION[interface] *= 2
 
     # Add iptables rule to DROP packets from this IP
     cmd = f"iptables -I FORWARD -s {ip_address} -j DROP"
@@ -145,6 +148,13 @@ def format_bytes(bytes_num):
         bytes_num /= 1024.0
     return f"{bytes_num:.2f} TB"
 
+def format_time(seconds):
+    """Format seconds to hours:minutes:seconds"""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    return f"{h:02d}:{m:02d}:{s:02d}"
+
 def display_stats():
     """Display statistics table"""
     while True:
@@ -211,7 +221,7 @@ def display_stats():
                 print("-" * 95)
                 for ip, unblock_time in blocked_ips.items():
                     time_left = int(unblock_time - time.time())
-                    print(f"  🔒 {ip:<20} - Unblocks in {time_left}s")
+                    print(f"  🔒 {ip:<20} - Unblocks in {format_time(time_left)}")
 
         print("=" * 95)
         print("Press Ctrl+C to stop")
@@ -229,8 +239,7 @@ def main():
     """Main function"""
     print("[+] Network Rate Limiter - Gateway Protection")
     print(f"[+] Monitoring interfaces: {', '.join(INTERFACES)}")
-    print(f"[+] Threshold: {BYTE_THRESHOLD} bytes per {TIME_WINDOW} seconds")
-    print(f"[+] Block duration: {BLOCK_DURATION} seconds")
+    print(f"[+] Threshold: {MAX_REQUESTS} sync requests per {TIME_WINDOW} seconds")
     print("[+] Starting sniffers...\n")
 
     # Start sniffer threads for each interface

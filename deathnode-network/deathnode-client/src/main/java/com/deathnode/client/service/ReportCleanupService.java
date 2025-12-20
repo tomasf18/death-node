@@ -21,7 +21,7 @@ public class ReportCleanupService {
         List<DatabaseService.ReportRow> unsynced = new ArrayList<>();
         
         for (DatabaseService.ReportRow report : reports) {
-            if (report.globalSequenceNumber == null) {
+            if (report.globalSequenceNumber == null || report.globalSequenceNumber == 0) {
                 unsynced.add(report);
             }
         }
