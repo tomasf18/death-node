@@ -52,7 +52,7 @@ public class GrpcConnectionManager {
             asyncStub = SyncServiceGrpc.newStub(channel);
             blockingStub = SyncServiceGrpc.newBlockingStub(channel);
 
-            System.out.println("gRPC TLS channel established");
+            System.out.println("gRPC TLS channel established.");
 
         } catch (SSLException e) {
             throw new RuntimeException("Failed to configure TLS: " + e.getMessage(), e);

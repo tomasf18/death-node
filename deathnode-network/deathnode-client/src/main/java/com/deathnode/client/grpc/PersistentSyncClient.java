@@ -44,6 +44,7 @@ public class PersistentSyncClient {
     private volatile long roundStartTime = -1;
     private volatile ScheduledFuture<?> timeoutTask = null;
     private volatile ScheduledFuture<?> pendingReportsTask = null;
+    private volatile CompletableFuture<Void> syncCompletionFuture = null;
 
     public PersistentSyncClient(DatabaseService db, String serverHost, int serverPort) {
         this.db = db;
@@ -58,11 +59,9 @@ public class PersistentSyncClient {
      */
     public void connect() {
         if (connected) {
-            System.out.println("Already connected");
+            // System.out.println("Already connected");
             return;
         }
-
-        System.out.println("Connecting to server...");
 
         SyncServiceGrpc.SyncServiceStub asyncStub = connectionManager.getAsyncStub();
 
@@ -82,7 +81,7 @@ public class PersistentSyncClient {
         requestObserver.onNext(helloMsg);
         connected = true;
 
-        System.out.println("Connected to server");
+        System.out.println("[V] Connected to server");
     }
 
     /**
@@ -91,11 +90,11 @@ public class PersistentSyncClient {
      */
     public void startPendingReportsMonitor() {
         if (pendingReportsTask != null) {
-            System.out.println("Pending reports monitor already running");
+            // System.out.println("Pending reports monitor already running");
             return;
         }
 
-        System.out.println("Starting pending reports monitor (interval: " + Config.INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS + " seconds)");
+        // System.out.println("Starting pending reports monitor (interval: " + Config.INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS + " seconds)");
 
         pendingReportsTask = pendingReportsExecutor.scheduleAtFixedRate(() -> {
             int pendingCount = pendingEnvelopes.size();
@@ -113,7 +112,7 @@ public class PersistentSyncClient {
      * Stop the pending reports monitor.
      */
     public void stopPendingReportsMonitor() {
-        System.out.println("Stopping pending reports monitor");
+        // System.out.println("Stopping pending reports monitor");
         if (pendingReportsTask != null) {
             pendingReportsTask.cancel(false);
             pendingReportsTask = null;
@@ -149,6 +148,10 @@ public class PersistentSyncClient {
 
             System.err.println("=== RECOVERY COMPLETE ===");
             System.err.println("All unsynced reports have been deleted. The node can now reconnect.");
+            
+            // Signal sync completion
+            PersistentSyncClient.this.currentRoundId = null;
+            PersistentSyncClient.this.completeSyncRound();
 
         } catch (SQLException e) {
             System.err.println("CRITICAL ERROR during cleanup: " + e.getMessage());
@@ -191,7 +194,7 @@ public class PersistentSyncClient {
      * Cancel the current timeout monitoring task.
      */
     private void cancelTimeoutMonitoring(String reason) {
-        System.out.println("Canceling timeout monitoring: " + reason);
+        // System.out.println("Canceling timeout monitoring: " + reason);
         if (this.timeoutTask != null) {
             this.timeoutTask.cancel(false);
             this.timeoutTask = null;
@@ -204,7 +207,7 @@ public class PersistentSyncClient {
      */
     public void addPendingEnvelope(String envelopeFilePath) {
         pendingEnvelopes.add(envelopeFilePath);
-        System.out.println("Added envelope to buffer: " + Paths.get(envelopeFilePath).getFileName() + " (total: " + pendingEnvelopes.size() + ")");
+        // System.out.println("Added envelope to buffer: " + Paths.get(envelopeFilePath).getFileName() + " (total: " + pendingEnvelopes.size() + ")");
     }
 
     /**
@@ -219,16 +222,19 @@ public class PersistentSyncClient {
      */
     public void triggerSync() {
         if (!connected) {
-            System.out.println("Not connected - cannot trigger sync");
+            System.out.println("[!] Not connected - cannot trigger sync");
             return;
         }
 
         if (currentRoundId != null) {
-            System.out.println("Sync already in progress (round: " + currentRoundId + ")");
+            System.out.println("[!] Sync already in progress (round: " + currentRoundId + ")");
             return;
         }
 
-        System.out.println("Triggering sync round...");
+        // Create a new CompletableFuture to track this sync round's completion
+        syncCompletionFuture = new CompletableFuture<>();
+
+        System.out.println("\n[SYNC] Triggering sync round...");
 
         Hello hello = Hello.newBuilder()
                 .setNodeId(Config.getNodeSelfId())
@@ -269,6 +275,35 @@ public class PersistentSyncClient {
     }
 
     /**
+     * Wait for the current sync round to complete (success, error, or timeout).
+     * Returns immediately if no sync is in progress.
+     *
+     * @throws Exception if waiting for sync completion times out
+     */
+    public void waitForSyncCompletion() throws Exception {
+        if (syncCompletionFuture == null) {
+            return;
+        }
+        try {
+            syncCompletionFuture.get(60, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            throw new Exception("Sync completion wait timed out after 60 seconds");
+        } catch (Exception e) {
+            // CompletableFuture completed (either successfully or with error from the round)
+            // The error/success was already printed by handlers, so we just return
+        }
+    }
+
+    /**
+     * Signal that the current sync round has completed (via any path: success, error, or timeout).
+     */
+    private void completeSyncRound() {
+        if (syncCompletionFuture != null && !syncCompletionFuture.isDone()) {
+            syncCompletionFuture.complete(null);
+        }
+    }
+
+    /**
      * Handles all messages from the server.
      */
     private class ServerResponseHandler implements StreamObserver<ServerMessage> {
@@ -293,13 +328,13 @@ public class PersistentSyncClient {
                 } else if (serverMessage.hasAck()) {
                     String message = serverMessage.getAck().getMessage();
                     checkForCommit(serverMessage, message);
-                    System.out.println("Server ACK: " + message);
+                    // System.out.println("Server ACK: " + message);
                     cancelTimeoutMonitoring("Server ACK received in time");
                 } else if (serverMessage.hasError()) {
                     handleError(serverMessage.getError());
                 }
             } catch (Exception e) {
-                System.out.println("Error handling server message: " + e.getMessage());
+                // System.out.println("Error handling server message: " + e.getMessage());
             }
         }
 
@@ -324,7 +359,7 @@ public class PersistentSyncClient {
 
             String roundId = request.getRoundId();
             //System.out.println("Server requested buffer for round: " + roundId + " - sending " + pendingEnvelopes.size() + " envelopes");
-            System.out.println("Server requested buffer for round: " + roundId);
+            System.out.println("\n  <- Server requested buffer for round: " + roundId);
 
 
             try {
@@ -352,9 +387,9 @@ public class PersistentSyncClient {
                 PrivateKey signPrivateKey = KeyLoader.loadPrivateKeyFromKeystore(Config.ED_PRIVATE_KEY_ALIAS, Config.getKeystorePath(), Config.KEYSTORE_PASSWORD);
                 // Compute and sign Merkle root
                 byte[] merkleRoot = MerkleUtils.computeMerkleRoot(envelopesToSend);
-                System.out.println("Computed Merkle root for buffer: " + HashUtils.bytesToHex(merkleRoot));
+                // System.out.println("Computed Merkle root for buffer: " + HashUtils.bytesToHex(merkleRoot));
                 byte[] signedMerkleRoot = SecureDocumentProtocol.signData(merkleRoot, signPrivateKey);
-                System.out.println("Signed Merkle root for buffer: " + HashUtils.bytesToHex(signedMerkleRoot));
+                // System.out.println("Signed Merkle root for buffer: " + HashUtils.bytesToHex(signedMerkleRoot));
 
                 builder.setBufferRoot(ByteString.copyFrom(merkleRoot));
                 builder.setSignedBufferRoot(ByteString.copyFrom(signedMerkleRoot));
@@ -368,10 +403,10 @@ public class PersistentSyncClient {
 
                 // Start timeout monitoring for this round
                 startTimeoutMonitoring(roundId);
-                System.out.println("Sent buffer with " + builder.getEnvelopesCount() + " envelopes for round " + roundId);
+                System.out.println("  -> Buffer sent (" + builder.getEnvelopesCount() + " envelopes)");
 
             } catch (Exception e) {
-                System.err.println("Failed to send buffer: " + e.getMessage());
+                System.err.println("[ERROR] Failed to send buffer: " + e.getMessage());
             }
         }
 
@@ -390,7 +425,7 @@ public class PersistentSyncClient {
             List<SignedBufferRoot> perNodeSignedBufferRoots = result.getPerNodeSignedBufferRootsList();
             byte[] prevBlockRoot = result.getPrevBlockRoot().toByteArray();
 
-            System.out.println("Received SyncResult for round: " + result.getRoundId() + " (" + result.getOrderedEnvelopesCount() + " envelopes)");
+            System.out.println("  <- Received SyncResult (" + result.getOrderedEnvelopesCount() + " envelopes)");
 
             VerificationsHandler.VerificationsResult verificationsResult = verificationsHandler.performAllVerifications(
                     roundId,
@@ -412,12 +447,17 @@ public class PersistentSyncClient {
             boolean success = verificationsResult.isSuccess();
             sendBlockAck(success);
             if (!success) {
-                System.out.println("[!] Block failed verification. Voiding round " + roundId);
+                System.out.println("[X] Block failed verification. Voiding round " + roundId);
+                PersistentSyncClient.this.currentRoundId = null;
+                PersistentSyncClient.this.completeSyncRound();
                 return;
             }
 
             pendingBlock = new PendingBlock(result, blockNumber, blockRoot);
-            System.out.println("Pending commit...");
+            // System.out.println("Pending commit...");
+            
+            // Signal sync completion
+            PersistentSyncClient.this.currentRoundId = null;
 
         }
 
@@ -452,9 +492,8 @@ public class PersistentSyncClient {
 
                 currentRoundId = null;
 
-                System.out.println("Sync completed: " + newEnvelopes + " new, " + existingEnvelopes + " existing envelopes");
-                System.out.println(String.format("Sync completed: %d new envelopes received (total: %d)", newEnvelopes, result.getOrderedEnvelopesCount()));
-
+                System.out.println("Sync completed: " + newEnvelopes + " new, " + existingEnvelopes + " existing envelopes, total " + result.getOrderedEnvelopesCount());
+                PersistentSyncClient.this.completeSyncRound();
             } catch (Exception e) {
                 System.err.println("Failed to process SyncResult: " + e.getMessage());
             }
@@ -533,6 +572,8 @@ public class PersistentSyncClient {
             } catch (SQLException e) {
                 System.err.println("Failed to cleanup unsynced reports after server error: " + e.getMessage());
             }
+            // Signal sync completion
+            PersistentSyncClient.this.completeSyncRound();
         }
 
         private void sendError(String code, String message) {

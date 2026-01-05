@@ -6,16 +6,16 @@ public class Config {
     
     // Server configuration
     public static final String SERVER_NODE_ID = "server";
-    //public static final String SERVER_HOST = "127.0.0.1"; // localhost
+    // public static final String SERVER_HOST = "127.0.0.1"; // localhost
     public static final String SERVER_HOST = "192.168.0.10"; // VM
     public static final int SERVER_PORT = 9090;
     
     // Sync configuration
     public static final int BUFFER_SIZE = 25;
-    public static final int BUFFER_THRESHOLD_TO_SYNC = 2; // max buffered reports before triggering sync
+    public static final int BUFFER_THRESHOLD_TO_SYNC = 3; // max buffered reports before triggering sync
     public static final int SYNC_TIMEOUT_SECONDS = 10;   
     public static final int MAX_ENVELOPES_TO_SEND_PER_SYNC = BUFFER_SIZE;
-    public static final int INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS = 7; // seconds between checking for pending reports
+    public static final int INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS = 120; // seconds between checking for pending reports
 
     // Report content sizes
     public static final int MAX_SUBJECT_LENGTH = 32;

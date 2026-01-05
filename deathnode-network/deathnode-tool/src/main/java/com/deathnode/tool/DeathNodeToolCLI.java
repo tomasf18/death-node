@@ -98,12 +98,12 @@ public class DeathNodeToolCLI {
             throw new IllegalArgumentException("At least one --recipient-pub is required");
         }
 
-        System.out.println("=== PROTECT ===");
-        System.out.println("Input: " + inFile);
-        System.out.println("Output: " + outFile);
-        System.out.println("Signer: " + signerNode);
-        System.out.println("Sequence: " + seq);
-        System.out.println("Recipients: " + recipientPubKeys.keySet());
+        // System.out.println("=== PROTECT ===");
+        // System.out.println("Input: " + inFile);
+        // System.out.println("Output: " + outFile);
+        // System.out.println("Signer: " + signerNode);
+        // System.out.println("Sequence: " + seq);
+        // System.out.println("Recipients: " + recipientPubKeys.keySet());
 
         // Load report
         JsonObject reportJson = KeyLoader.readJsonObject(inFile);
@@ -142,10 +142,10 @@ public class DeathNodeToolCLI {
         String recipientPrivPath = getRequired(params, "--recipient-priv", "Recipient RSA private key");
         String senderPubPath = getRequired(params, "--sender-pub", "Sender Ed25519 public key");
 
-        System.out.println("=== UNPROTECT ===");
-        System.out.println("Input: " + inFile);
-        System.out.println("Output: " + outFile);
-        System.out.println("Recipient: " + recipientNode);
+        // System.out.println("=== UNPROTECT ===");
+        // System.out.println("Input: " + inFile);
+        // System.out.println("Output: " + outFile);
+        // System.out.println("Recipient: " + recipientNode);
 
         // Load envelope
         JsonObject envelopeJson = KeyLoader.readJsonObject(inFile);
@@ -173,8 +173,8 @@ public class DeathNodeToolCLI {
         // Required parameters
         String inFile = getRequired(params, "--in", "Input envelope JSON file");
 
-        System.out.println("=== CHECK ===");
-        System.out.println("Input: " + inFile);
+        // System.out.println("=== CHECK ===");
+        // System.out.println("Input: " + inFile);
 
         // Load envelope
         JsonObject envelopeJson = KeyLoader.readJsonObject(inFile);

@@ -40,7 +40,7 @@ public class Main {
         System.out.println("Type 'help' to see available commands.");
 
         while (true) {
-            System.out.print("deathnode-client> ");
+            System.out.print("\n\ndeathnode-client> ");
 
             String line = sc.nextLine().trim();
             if (line.isEmpty()) continue;
@@ -65,6 +65,7 @@ public class Main {
 
                     case "sync":
                         clientService.syncReports();
+                        System.out.println();
                         break;
 
                     // case "reset-db": // DEBUGGING ONLY
@@ -115,6 +116,5 @@ public class Main {
         // System.out.println("  reset-db          DEBUGGING ONLY: Reset the local database");
         System.out.println("  help              Show this help");
         System.out.println("  exit | q          Exit the client");
-        System.out.println();
     }
 }

@@ -26,44 +26,42 @@ public class VerificationsHandler {
 
     public VerificationsResult performAllVerifications(String roundId, List<byte[]> orderedEnvelopes, long blockNumber, byte[] blockRoot, byte[] signedBlockRoot, List<SignedBufferRoot> perNodeSignedBufferRoots, byte[] prevBlockRoot) {
         try {
+            System.out.println("\n[VERIFICATION PIPELINE] Round " + roundId);
+            
             String serverSigningPublicKeyPEM = db.getSignPubKey(Config.SERVER_NODE_ID);
             PublicKey serverSigningPublicKey = KeyLoader.pemStringToPublicKey(serverSigningPublicKeyPEM, Config.SIGNING_KEYS_ALG);
             if (!SecureDocumentProtocol.verifySignature(blockRoot, signedBlockRoot, serverSigningPublicKey)) {
-                System.out.println("Invalid block signature from server for round " + roundId);
+                System.out.println("  [X] Step 1: Block signature verification FAILED");
                 return new VerificationsResult(false, "INVALID_SIGNATURE", "Buffer signature verification failed");
             }
-
-            System.out.println("Verified block signature from server for round " + roundId);
+            System.out.println("  [V] Step 1: Block signature verified");
 
             LastBlockInfo lastBlockInfo = db.getLastBlockInfo();
             if (!verifyPreviousBlockMatch(lastBlockInfo, blockNumber, prevBlockRoot)) {
-                System.out.println("Previous block info mismatch for round " + roundId);
+                System.out.println("  [X] Step 2: Previous block match verification FAILED");
                 return new VerificationsResult(false, "PREVIOUS_BLOCK_MISMATCH", "Previous block info does not match last known block");
             }
-
-            System.out.println("Verified previous block match for round " + roundId);
+            System.out.println("  [V] Step 2: Previous block match verified");
 
             if (!MerkleUtils.verifyMerkleRoot(orderedEnvelopes, blockRoot)) {
-                System.out.println("Block Merkle root mismatch for round " + roundId);
+                System.out.println("  [X] Step 3: Block Merkle root verification FAILED");
                 return new VerificationsResult(false, "INVALID_MERKLE_ROOT", "Block Merkle root verification failed");
             }
-
-            System.out.println("Verified block Merkle root for round " + roundId);
+            System.out.println("  [V] Step 3: Block Merkle root verified");
 
             if (!verifyNodesBufferSignatures(perNodeSignedBufferRoots)) {
-                System.out.println("One or more node buffer root signatures invalid for round " + roundId);
+                System.out.println("  [X] Step 4: Node buffer signatures verification FAILED");
                 return new VerificationsResult(false, "INVALID_NODE_BUFFER_ROOT_SIGNATURE", "One or more node buffer root signatures invalid");
             }
-
-            System.out.println("Verified all node buffer root signatures for round " + roundId);
+            System.out.println("  [V] Step 4: All node buffer signatures verified");
 
             List<String> nodeIds = perNodeSignedBufferRoots.stream().map(SignedBufferRoot::getNodeId).toList();
             if (!verifyPerNodeEnvelopeChain(nodeIds, orderedEnvelopes)) {
-                System.out.println("Per-node envelope chain verification failed for one or more nodes for round " + roundId);
+                System.out.println("  [X] Step 5: Per-node envelope chain verification FAILED");
                 return new VerificationsResult(false, "INVALID_ENVELOPE_CHAIN", "Per-node envelope chain verification failed for one or more nodes");
             }
-
-            System.out.println("Verified per-node envelope chains for round " + roundId);
+            System.out.println("  [V] Step 5: Per-node envelope chains verified");
+            System.out.println("  [V] ALL VERIFICATIONS PASSED\n");
         } catch (Exception e) {
             return new VerificationsResult(false, "VERIFICATION_ERROR",
                     "Exception during verifications: " + e.getMessage());
@@ -118,7 +116,6 @@ public class VerificationsHandler {
                     .toList();
             
             if (!verifyEnvelopeChain(nodeId, nodeEnvelopes)) {
-                System.out.println("Envelope chain verification failed for node " + nodeId);
                 return false;
             }
         }
@@ -138,16 +135,17 @@ public class VerificationsHandler {
         
         for (Envelope env : envelopes) {
             Metadata meta = env.getMetadata();
+            
+            if ((lastHash == null && meta.getPrevEnvelopeHash() != null && !meta.getPrevEnvelopeHash().isEmpty()) || 
+                (lastHash != null && !lastHash.equals(meta.getPrevEnvelopeHash()))) {
+                System.out.println(" -> Envelope chain check failed for node " + nodeId +
+                        ": expected prev hash " + lastHash + ", got " + meta.getPrevEnvelopeHash());
+                return false;
+            }
 
             if (meta.getNodeSequenceNumber() != expectedSeq) {
                 System.out.println(" -> Envelope chain check failed for node " + nodeId +
                         ": expected seq " + expectedSeq + ", got " + meta.getNodeSequenceNumber());
-                return false;
-            }
-
-            if (lastHash != null && !lastHash.equals(meta.getPrevEnvelopeHash())) {
-                System.out.println(" -> Envelope chain check failed for node " + nodeId +
-                        ": expected prev hash " + lastHash + ", got " + meta.getPrevEnvelopeHash());
                 return false;
             }
 

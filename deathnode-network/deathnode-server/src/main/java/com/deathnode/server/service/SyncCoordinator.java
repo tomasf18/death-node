@@ -3,10 +3,6 @@ package com.deathnode.server.service;
 import com.deathnode.tool.SecureDocumentProtocol;
 import com.deathnode.tool.util.KeyLoader;
 import com.deathnode.common.grpc.*;
-import com.deathnode.common.grpc.RequestBuffer;
-import com.deathnode.common.grpc.SyncResult;
-import com.deathnode.common.grpc.Commit;
-import com.deathnode.common.grpc.ServerMessage;
 import com.deathnode.common.model.Envelope;
 import com.deathnode.common.model.Metadata;
 import com.deathnode.common.util.HashUtils;
@@ -66,6 +62,10 @@ public class SyncCoordinator {
     private String keystorePath;
     @Value("${sync.timeout-ms:5000}")
     private long syncTimeoutMs;
+    @Value("${sync.violation-sr3-enabled:false}")
+    private boolean violationSr3Enabled;
+    @Value("${sync.violation-sr4-enabled:false}")
+    private boolean violationSr4Enabled;
     private SyncRound activeRound = null;
     private PendingRound pendingRound = null;
 
@@ -87,7 +87,7 @@ public class SyncCoordinator {
     public String startRoundIfAbsent(String initiatorNodeId) {
         synchronized (roundLock) {
             if (activeRound != null) {
-                System.out.println("Reusing existing round: " + activeRound.getRoundId());
+                // System.out.println("Reusing existing round: " + activeRound.getRoundId());
                 return activeRound.getRoundId();
             }
 
@@ -98,11 +98,11 @@ public class SyncCoordinator {
             String roundId = UUID.randomUUID().toString();
             activeRound = new SyncRound(roundId, expectedNodes, initiatorNodeId);
 
-            System.out.println("Started new sync round: " + roundId + " (initiator: " + initiatorNodeId
-                    + ", expected nodes: " + expectedNodes + ")");
+            System.out.println("\n[SYNC ROUND] Started: " + roundId + " (nodes: " + expectedNodes.size() + ")");
 
             broadcastRequestBuffer(roundId);
             scheduleRoundTimeout(roundId, activeRound);
+            System.out.println();
 
             return roundId;
         }
@@ -117,35 +117,35 @@ public class SyncCoordinator {
         timeoutExecutor.schedule(() -> {
             synchronized (roundLock) {
                 if (activeRound != round) {
-                    System.out.println("Timeout for round " + roundId + " - but a newer round is active, ignoring");
+                    // System.out.println("Timeout for round " + roundId + " - but a newer round is active, ignoring");
                     return;
                 }
 
                 Set<String> unsubmitted = round.getUnsubmittedNodes();
                 if (unsubmitted.isEmpty()) {
-                    System.out.println("Timeout for round " + roundId + " - but all nodes have submitted, ignoring");
+                    // System.out.println("Timeout for round " + roundId + " - but all nodes have submitted, ignoring");
                     return;
                 }
 
-                System.out.println("TIMEOUT: Round " + roundId + " did not receive buffers from nodes: " + unsubmitted);
+                System.out.println("[TIMEOUT] Round " + roundId + " - missing from: " + unsubmitted);
 
                 for (String nodeId : unsubmitted) {
-                    System.out.println("  Removing node " + nodeId + " from round " + roundId);
+                    // System.out.println("  Removing node " + nodeId + " from round " + roundId);
                     round.removeExpectedNode(nodeId);
                 }
 
                 if (round.getExpectedNodes().isEmpty()) {
-                    System.out.println("Round " + roundId + " has no remaining nodes, aborting");
+                    // System.out.println("Round " + roundId + " has no remaining nodes, aborting");
                     activeRound = null;
                     round.getCompletionFuture().completeExceptionally(
                             new RuntimeException("Round aborted: no nodes submitted buffer"));
                 } else if (round.isComplete()) {
-                    System.out.println("Round " + roundId + " is now complete after timeout - finalizing");
+                    // System.out.println("Round " + roundId + " is now complete after timeout - finalizing");
                     SyncRound completedRound = activeRound;
                     activeRound = null;
                     CompletableFuture.supplyAsync(() -> finalizeRound(completedRound));
                 } else {
-                    System.out.println("Round " + roundId + " still waiting for nodes after timeout: " + round.getUnsubmittedNodes());
+                    // System.out.println("Round " + roundId + " still waiting for nodes after timeout: " + round.getUnsubmittedNodes());
                 }
             }
         }, syncTimeoutMs, TimeUnit.MILLISECONDS);
@@ -176,7 +176,7 @@ public class SyncCoordinator {
      */
     public synchronized void registerClient(String nodeId, ClientConnection connection) {
         allConnections.put(nodeId, connection);
-        System.out.println("Registered client connection: " + nodeId);
+        // System.out.println("Registered client connection: " + nodeId);
     }
 
     /**
@@ -184,7 +184,7 @@ public class SyncCoordinator {
      */
     public synchronized void unregisterClient(String nodeId) {
         allConnections.remove(nodeId);
-        System.out.println("Unregistered client connection: " + nodeId);
+        // System.out.println("Unregistered client connection: " + nodeId);
     }
 
     /**
@@ -198,15 +198,12 @@ public class SyncCoordinator {
                         new IllegalStateException("No active round"));
             }
 
-            System.out.println("Node " + nodeId + " submitted " + envelopes.size() + " envelopes to round "
-                    + activeRound.getRoundId());
-
             activeRound.putBuffer(nodeId, envelopes);
             activeRound.putNodeSignedBufferRoot(nodeId, HashUtils.bytesToHex(bufferRoot), HashUtils.bytesToHex(signedBufferRoot));
 
             // Check if round is complete (all expected nodes submitted)
             if (activeRound.isComplete()) {
-                System.out.println("Round " + activeRound.getRoundId() + " is complete - finalizing");
+                // System.out.println("Round " + activeRound.getRoundId() + " is complete - finalizing");
 
                 // Finalize asynchronously
                 SyncRound round = activeRound;
@@ -221,13 +218,71 @@ public class SyncCoordinator {
     }
 
     /**
+     * Apply SR3 violation: reorder envelopes by moving first to last (order tampering).
+     * This simulates server misbehavior that breaks envelope ordering after verification.
+     */
+    private List<byte[]> applySr3Violation(List<EnvelopeWithMeta> allEnvelopes) {
+        if (allEnvelopes.size() > 1) {
+            EnvelopeWithMeta first = allEnvelopes.remove(0);
+            allEnvelopes.add(first);
+            System.out.println("[VIOLATION] SR3: Reordered envelopes (moved first to last)");
+        }
+
+        List<byte[]> orderedBytes = new ArrayList<>();
+        for (EnvelopeWithMeta envelope : allEnvelopes) {
+            orderedBytes.add(envelope.envelopeBytes);
+        }
+        return orderedBytes;
+    }
+
+    /**
+     * Apply SR4 violation: modify first envelope's prev_envelope_hash to break chain.
+     * This simulates server misbehavior that breaks per-sender history continuity.
+     */
+    private void applySr4Violation(List<EnvelopeWithMeta> allEnvelopes) {
+        if (allEnvelopes.size() != 1) {
+            return;
+        }
+
+        try {
+            EnvelopeWithMeta firstEnv = allEnvelopes.get(0);
+            
+            // Parse the envelope JSON
+            String json = new String(firstEnv.envelopeBytes, StandardCharsets.UTF_8);
+            JsonObject jsonObj = JsonParser.parseString(json).getAsJsonObject();
+            JsonObject metadataObj = jsonObj.getAsJsonObject("metadata");
+            
+            // Create a fake prev_envelope_hash (any different hash)
+            String fakeHash = "00000000000000000000000000000000000000000000000000000000000000ff";
+            String originalHash = metadataObj.get("prev_envelope_hash").getAsString();
+            metadataObj.addProperty("prev_envelope_hash", fakeHash);
+            
+            // Serialize back to bytes
+            byte[] modifiedBytes = jsonObj.toString().getBytes(StandardCharsets.UTF_8);
+            
+            // Replace in the list
+            allEnvelopes.set(0, new EnvelopeWithMeta(
+                    firstEnv.signerNode,
+                    modifiedBytes,
+                    HashUtils.sha256Hex(modifiedBytes),
+                    Envelope.fromJson(jsonObj),
+                    firstEnv.timestamp
+            ));
+            
+            System.out.println("[VIOLATION] SR4: Modified first envelope's prev_envelope_hash from " + originalHash + " to " + fakeHash);
+        } catch (Exception e) {
+            System.out.println("[VIOLATION] SR4: Failed to apply violation - " + e.getMessage());
+        }
+    }
+
+    /**
      * Finalize a round: order envelopes and return result.
      * <p>
      * For now: Simple timestamp-based ordering, no security checks.
      */
     @Transactional
     protected SyncResult finalizeRound(SyncRound round) {
-        System.out.println("Finalizing round: " + round.getRoundId());
+        System.out.println("\n[FINALIZATION] Round: " + round.getRoundId());
 
         // 1. Collect all envelopes with metadata
         List<EnvelopeWithMeta> allEnvelopes = new ArrayList<>();
@@ -240,7 +295,7 @@ public class SyncCoordinator {
             Node signerNode = nodeRepository.findByNodeId(nodeId);
 
             if (signerNode == null) {
-                System.out.println("Unknown node " + nodeId + " in round " + round.getRoundId() + " - skipping");
+                // System.out.println("Unknown node " + nodeId + " in round " + round.getRoundId() + " - skipping");
                 continue;
             }
 
@@ -261,7 +316,7 @@ public class SyncCoordinator {
                     allEnvelopes.add(new EnvelopeWithMeta(signerNode, envelopeBytes, hash, envelope, timestamp));
 
                 } catch (Exception e) {
-                    System.out.println("Failed to parse envelope from " + nodeId + ": " + e.getMessage());
+                    // System.out.println("Failed to parse envelope from " + nodeId + ": " + e.getMessage());
                 }
             }
         }
@@ -272,18 +327,30 @@ public class SyncCoordinator {
                 .thenComparingLong(e -> e.envelope.getMetadata().getNodeSequenceNumber())
                 .thenComparing(e -> e.signerNode.getNodeId()));
 
-        System.out.println("Ordered " + allEnvelopes.size() + " envelopes for round " + round.getRoundId());
-
+        // System.out.println("Ordered " + allEnvelopes.size() + " envelopes for round " + round.getRoundId());
+        
+        // Apply SR4 violation: modify first envelope's prev_envelope_hash (diverging history)
+        if (violationSr4Enabled) {
+            applySr4Violation(allEnvelopes);
+        }
+        
         List<byte[]> orderedBytes = new ArrayList<>();
         for (EnvelopeWithMeta envelope : allEnvelopes) {
             orderedBytes.add(envelope.envelopeBytes);
         }
-
+        
         // 3. Build result
         SyncResult result = new SyncResult();
         result.setRoundId(round.getRoundId());
-        result.setOrderedEnvelopes(orderedBytes);
+        
         byte[] blockRoot = MerkleUtils.computeMerkleRoot(orderedBytes);
+        
+        // Apply SR3 violation: reorder envelopes (order tampering) AFTER block root creation
+        if (violationSr3Enabled) {
+            orderedBytes = applySr3Violation(allEnvelopes);
+        }
+
+        result.setOrderedEnvelopes(orderedBytes);
         try {
             PrivateKey serverSigningKey = KeyLoader.loadPrivateKeyFromKeystore(edPrivateKeyAlias, keystorePath, keystorePassword);
             byte[] signedBlockRoot = SecureDocumentProtocol.signData(blockRoot, serverSigningKey);
@@ -305,12 +372,13 @@ public class SyncCoordinator {
         result.setBlockNumber(prevBlockNumber + 1);
         result.setPrevBlockRoot(prevBlockRoot);
         result.setPerNodeSignedBufferRoots(round.getPerNodeSignedBufferRoots());
-
+        
         SignedBlockMerkleRoot newSignedBlockMerkleRoot = new SignedBlockMerkleRoot(
-                prevBlockNumber + 1,
+            prevBlockNumber + 1,
                 HashUtils.bytesToHex(blockRoot),
                 (prevBlockRoot != null) ? HashUtils.bytesToHex(prevBlockRoot) : null
-        );
+            );
+
         pendingRound = new PendingRound(allEnvelopes, newSignedBlockMerkleRoot, allConnections.size());
 
         // 4. Complete the round's future
@@ -322,48 +390,65 @@ public class SyncCoordinator {
      * Collect acks from clients
      */
     public void receivePeerAck(boolean accepted) {
-        if (pendingRound == null)
-            return;
-        if (!accepted) {
-            System.out.println("[!] Block nacked. Clearing pending round...");
-            pendingRound = null;
-            Ack commit = Ack.newBuilder()
-                    .setMessage("commit " + pendingRound.getRoot().getBlockRoot())
-                    .setSuccess(false)
-                    .build();
+        synchronized (roundLock) {
+            if (pendingRound == null)
+                return;
+            
+            if (!accepted) {
+                System.out.println("[!] Block nacked. Clearing pending round...");
+                // Capture root BEFORE setting pendingRound to null
+                String blockRoot = pendingRound.getRoot().getBlockRoot();
+                pendingRound = null;
+                
+                Ack commit = Ack.newBuilder()
+                        .setMessage("commit " + blockRoot)
+                        .setSuccess(false)
+                        .build();
 
-            ServerMessage msg = ServerMessage.newBuilder()
-                    .setAck(commit)
-                    .build();
+                ServerMessage msg = ServerMessage.newBuilder()
+                        .setAck(commit)
+                        .build();
 
-            broadcast(msg);
-            return;
-        }
+                broadcast(msg);
+                return;
+            }
 
-        if (pendingRound.isAcked()) {
-            persistAll();
+            if (pendingRound.isAcked()) {
+                persistAll();
 
-            Ack commit = Ack.newBuilder()
-                    .setMessage("commit " + pendingRound.getRoot().getBlockRoot())
-                    .setSuccess(true)
-                    .build();
+                Ack commit = Ack.newBuilder()
+                        .setMessage("commit " + pendingRound.getRoot().getBlockRoot())
+                        .setSuccess(true)
+                        .build();
 
-            ServerMessage msg = ServerMessage.newBuilder()
-                    .setAck(commit)
-                    .build();
+                ServerMessage msg = ServerMessage.newBuilder()
+                        .setAck(commit)
+                        .build();
 
-            broadcast(msg);
+                broadcast(msg);
+            }
         }
     }
 
     private void broadcast(ServerMessage msg) {
         synchronized (roundLock) {
+            String msgType = "Unknown";
+            if (msg.hasRequestBuffer()) {
+                msgType = "RequestBuffer";
+            } else if (msg.hasSyncResult()) {
+                msgType = "SyncResult";
+            } else if (msg.hasAck()) {
+                msgType = "Ack";
+            } else if (msg.hasError()) {
+                msgType = "Error";
+            }
+            
             for (ClientConnection conn : allConnections.values()) {
                 try {
                     conn.observer.onNext(msg);
-                    System.out.println("Sent message to node: " + conn.nodeId);
+                    System.out.println("  -> Sent " + msgType + " to node: " + conn.nodeId);
                 } catch (Exception e) {
-                    System.out.println("Failed to send message to " + conn.nodeId + ": " + e.getMessage());
+                    System.out.println("Failed to send " + msgType + " to " + conn.nodeId + ": " + e.getMessage());
                 }
             }
         }
@@ -426,18 +511,19 @@ public class SyncCoordinator {
 
         for (Envelope env : envelopes) {
             Metadata meta = env.getMetadata();
+            
+            // Check previous hash envelope chain
+            if ((lastHash == null && meta.getPrevEnvelopeHash() != null && !meta.getPrevEnvelopeHash().isEmpty()) || 
+                (lastHash != null && !lastHash.equals(meta.getPrevEnvelopeHash()))) {
+                System.out.println(" -> Envelope chain check failed for node " + node.getNodeId() +
+                        ": expected prev hash " + lastHash + ", got " + meta.getPrevEnvelopeHash());
+                return false;
+            }
 
             // Check sequence envelope chain
             if (meta.getNodeSequenceNumber() != expectedSeq) {
                 System.out.println(" -> Envelope chain check failed for node " + node.getNodeId() +
                         ": expected seq " + expectedSeq + ", got " + meta.getNodeSequenceNumber());
-                return false;
-            }
-
-            // Check previous hash envelope chain
-            if (lastHash != null && !lastHash.equals(meta.getPrevEnvelopeHash())) {
-                System.out.println(" -> Envelope chain check failed for node " + node.getNodeId() +
-                        ": expected prev hash " + lastHash + ", got " + meta.getPrevEnvelopeHash());
                 return false;
             }
 
@@ -451,9 +537,11 @@ public class SyncCoordinator {
 
     public VerificationsResult performAllVerifications(String bufferNodeId, String expectedNodeId, List<byte[]> envelopes, byte[] bufferRoot, byte[] signedBufferRoot) {
         if (!bufferNodeId.equals(expectedNodeId)) {
-            System.out.println("Node ID mismatch: stream=" + expectedNodeId + ", upload=" + bufferNodeId);
+            System.out.println("[X] Node ID mismatch: stream=" + expectedNodeId + ", upload=" + bufferNodeId);
             return new VerificationsResult(false, "NODE_ID_MISMATCH", "Node ID in upload doesn't match connection");
         }
+
+        System.out.println("\n[VERIFICATION PIPELINE] Buffer from " + bufferNodeId);
 
         Node node = nodeRepository.findByNodeId(bufferNodeId);
 
@@ -461,18 +549,16 @@ public class SyncCoordinator {
             PublicKey signPubKey = KeyLoader.pemStringToPublicKey(node.getSignPubKey(), "Ed25519");
 
             if (!SecureDocumentProtocol.verifySignature(bufferRoot, signedBufferRoot, signPubKey)) {
-                System.out.println("Invalid buffer signature from node " + bufferNodeId);
+                System.out.println("  [X] Step 1: Buffer signature verification FAILED");
                 return new VerificationsResult(false, "INVALID_SIGNATURE", "Buffer signature verification failed");
             }
-
-            System.out.println(" -> Buffer signature verified for node " + bufferNodeId);
+            System.out.println("  [V] Step 1: Buffer signature verified");
 
             if (!MerkleUtils.verifyMerkleRoot(envelopes, bufferRoot)) {
-                System.out.println("Buffer Merkle root mismatch from node " + bufferNodeId);
+                System.out.println("  [X] Step 2: Buffer Merkle root verification FAILED");
                 return new VerificationsResult(false, "INVALID_MERKLE_ROOT", "Buffer Merkle root verification failed");
             }
-
-            System.out.println(" -> Buffer Merkle root verified for node " + bufferNodeId);
+            System.out.println("  [V] Step 2: Buffer Merkle root verified");
 
             List<Envelope> envelopesObjs = new ArrayList<>();
             for (byte[] envBytes : envelopes) {
@@ -480,18 +566,17 @@ public class SyncCoordinator {
             }
 
             if (!verifyEnvelopeChain(node, envelopesObjs)) {
-                System.out.println("Envelope chain verification failed for node " + bufferNodeId);
+                System.out.println("  [X] Step 3: Envelope chain verification FAILED");
                 return new VerificationsResult(false, "INVALID_ENVELOPE_CHAIN", "Envelope chain verification failed");
             }
-
-            System.out.println(" -> Envelope chain verified for node " + bufferNodeId);
+            System.out.println("  [V] Step 3: Envelope chain verified");
+            System.out.println("  [V] ALL VERIFICATIONS PASSED\n");
 
         } catch (Exception e) {
-            System.out.println("Error during verifications for node " + bufferNodeId + ": " + e.getMessage());
+            System.out.println("  [X] Verification error: " + e.getMessage());
             return new VerificationsResult(false, "VERIFICATION_ERROR", "Error during verifications: " + e.getMessage());
         }
 
-        System.out.println(" -> All verifications passed for node " + bufferNodeId);
         return new VerificationsResult(true, null, null);
     }
 

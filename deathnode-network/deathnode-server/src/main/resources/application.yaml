@@ -13,7 +13,7 @@ spring:
     name: deathnode-server
   datasource:
     url: jdbc:postgresql://192.168.0.200:5432/deathnode?ssl=true&sslmode=verify-full&sslrootcert=server-data/db-client/ca-cert.pem&sslcert=server-data/db-client/client-cert.pem&sslkey=server-data/db-client/client-key.pk8 # VM
-    #url: jdbc:postgresql://127.0.0.1:5432/deathnode?ssl=true&sslmode=verify-full&sslrootcert=server-data/db-client/ca-cert.pem&sslcert=server-data/db-client/client-cert.pem&sslkey=server-data/db-client/client-key.pk8
+    # url: jdbc:postgresql://127.0.0.1:5432/deathnode?ssl=true&sslmode=verify-full&sslrootcert=server-data/db-client/ca-cert.pem&sslcert=server-data/db-client/client-cert.pem&sslkey=server-data/db-client/client-key.pk8
     username: dn_admin
     password: dn_pass
     driver-class-name: org.postgresql.Driver
@@ -40,3 +40,33 @@ rsa_private_key_alias: rsa-key
 
 sync:
   timeout-ms: 5000 # 5s -> timeout for buffer submissions
+
+---
+
+# Profile: normal (default behavior - no violations)
+spring:
+  config:
+    activate:
+      on-profile: normal
+
+---
+
+# Profile: violation-sr3 (Order tampering - reorder envelopes after verification)
+spring:
+  config:
+    activate:
+      on-profile: violation-sr3
+
+sync:
+  violation-sr3-enabled: true
+
+---
+
+# Profile: violation-sr4 (Diverging history - modify first envelope's prev_envelope_hash)
+spring:
+  config:
+    activate:
+      on-profile: violation-sr4
+
+sync:
+  violation-sr4-enabled: true

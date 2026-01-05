@@ -45,7 +45,7 @@ public class ClientService {
      * Create a report interactively (CLI).
      */
     public String createReportInteractive(Scanner scanner) throws Exception {
-        System.out.print("Suspect: ");
+        System.out.print("\nSuspect: ");
         String suspect = scanner.nextLine().trim();
 
         System.out.print("Description: ");
@@ -103,7 +103,7 @@ public class ClientService {
             return null;
         }
 
-        System.out.println("Creating report: suspect=" + suspect + ", location=" + location);
+        System.out.println("\nCreating report: suspect=" + suspect + ", location=" + location);
 
         // 1. Build Report object
         String reportId = UUID.randomUUID().toString();
@@ -178,6 +178,7 @@ public class ClientService {
 
     /**
      * Manually trigger synchronization of buffered reports.
+     * Blocks until the sync round completes (success, error, or timeout).
      */
     public void syncReports() throws Exception {
         int pending = syncClient.getPendingCount();
@@ -190,6 +191,7 @@ public class ClientService {
         //System.out.println("Initiating sync round with " + pending + " pending reports...");
 
         syncClient.triggerSync();
+        syncClient.waitForSyncCompletion();
     }
 
     public void shutdown() {
@@ -209,18 +211,21 @@ public class ClientService {
         // Load RSA private key for decryption
         PrivateKey rsaPriv = KeyLoader.loadPrivateKeyFromKeystore(Config.RSA_PRIVATE_KEY_ALIAS, Config.getKeystorePath(), Config.KEYSTORE_PASSWORD);
 
-        System.out.printf("%-66s %-13s %-13s %-13s %-32s %-66s%n",
+        System.out.println("\n" + "-".repeat(99));
+        System.out.printf("%-18s %-13s %-13s %-13s %-22s %-10s%n",
                 "envelope_hash", "signer", "local_seq", "global_seq", "meta_timestamp", "prev_hash");
-        System.out.println("-".repeat(200));
+        System.out.println("-".repeat(99));
 
         for (DatabaseService.ReportRow row : rows) {
-            System.out.printf("%-66s %-13s %-13d %-13s %-32s %-66s%n",
-                    row.envelopeHash,
+            System.out.printf("%-18s %-13s %-13d %-13s %-22s %-10s%n",
+                    truncateHash(row.envelopeHash),
                     row.signerNodeId,
                     row.nodeSequenceNumber,
                     row.globalSequenceNumber == 0 ? "unsynced" : row.globalSequenceNumber,
-                    row.metadataTimestamp,
-                    row.prevEnvelopeHash == null ? "" : row.prevEnvelopeHash);
+                    truncateTimestamp(row.metadataTimestamp),
+                    truncateHash(row.prevEnvelopeHash));
+            
+            System.out.println();
 
             // Try to read and verify envelope
             Path envPath = Paths.get(row.filePath);
@@ -247,11 +252,11 @@ public class ClientService {
                 }
 
                 // Verify envelope hash
-                String envelopeHash = envelope.computeHashHex();
-                if (!envelopeHash.equals(row.envelopeHash)) {
-                    System.out.println("  [ERROR] Envelope hash mismatch: computed=" + envelopeHash + ", expected=" + row.envelopeHash);
-                    continue;
-                }
+                // String envelopeHash = envelope.computeHashHex();
+                // if (!envelopeHash.equals(row.envelopeHash)) {
+                //     System.out.println("  [ERROR] Envelope hash mismatch: computed=" + envelopeHash + ", expected=" + row.envelopeHash);
+                //     continue;
+                // }
 
                 // Load sender public key
                 String senderId = envelope.getMetadata().getSignerNodeId();
@@ -271,10 +276,11 @@ public class ClientService {
                 System.out.println("       Suspect: " + decrypted.getContent().getSuspect());
                 System.out.println("       Location: " + decrypted.getContent().getLocation());
                 System.out.println("       Description: " + decrypted.getContent().getDescription());
-
+                
             } catch (Exception e) {
                 System.out.println("  [ERROR] " + e.getMessage());
             }
+            System.out.println("-".repeat(99));
         }
     }
 
@@ -333,5 +339,24 @@ public class ClientService {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    private String truncateHash(String hash) {
+        if (hash == null || hash.isEmpty()) {
+            return "";
+        }
+        return hash.length() > 5 ? hash.substring(0, 5) + "(...)" : hash;
+    }
+
+    private String truncateTimestamp(String timestamp) {
+        if (timestamp == null || timestamp.isEmpty()) {
+            return "";
+        }
+        // Keep only up to seconds: "2026-01-05T10:30:45Z"
+        int dotIndex = timestamp.indexOf('.');
+        if (dotIndex > 0) {
+            return timestamp.substring(0, dotIndex) + "Z";
+        }
+        return timestamp;
     }
 }

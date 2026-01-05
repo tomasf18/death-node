@@ -62,7 +62,6 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         @Override
         public void onNext(ClientMessage clientMessage) {
-            System.out.println("Server received: " + clientMessage);
             try {
                 if (clientMessage.hasHello()) {
                     handleHello(clientMessage.getHello());
@@ -73,10 +72,10 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                 } else if (clientMessage.hasError()) {
                     handleError(clientMessage.getError());
                 } else {
-                    System.out.println("Received unknown client message type from " + this.nodeId);
+                    // System.out.println("Received unknown client message type from " + this.nodeId);
                 }
             } catch (Exception e) {
-                System.out.println("Error handling client message from " + this.nodeId + ": " + e.getMessage());
+                // System.out.println("Error handling client message from " + this.nodeId + ": " + e.getMessage());
                 sendError("INTERNAL_ERROR", "Failed to process message: " + e.getMessage());
             }
         }
@@ -85,13 +84,14 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
             this.nodeId = hello.getNodeId();
 
             if (hello.getStartSync()) {
+                System.out.println("\n  <- Received Sync Request from " + this.nodeId);
                 String roundId = coordinator.startRoundIfAbsent(this.nodeId);
-                System.out.println("Client " + this.nodeId + " initiated sync round " + roundId);
+                // System.out.println("Client " + this.nodeId + " initiated sync round " + roundId);
             } else {
                 SyncCoordinator.ClientConnection conn = new SyncCoordinator.ClientConnection(this.nodeId, responseObserver);
                 coordinator.registerClient(this.nodeId, conn);
                 registered = true;
-                System.out.println("Client " + this.nodeId + " connected");
+                System.out.println("[V] Connected: " + this.nodeId);
             }
         }
 
@@ -103,6 +103,8 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                     .map(ByteString::toByteArray)
                     .toList();
 
+            System.out.println("  <- Buffer received from " + bufferNodeId + " (" + envelopes.size() + " envelopes)");
+
             byte[] bufferRoot = upload.getBufferRoot().toByteArray();
             byte[] signedBufferRoot = upload.getSignedBufferRoot().toByteArray();
 
@@ -113,7 +115,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                 return;
             }
 
-            System.out.println("Received buffer upload from " + bufferNodeId + " with " + upload.getEnvelopesCount() + " envelopes");
+            // System.out.println("Received buffer upload from " + bufferNodeId + " with " + upload.getEnvelopesCount() + " envelopes");
 
             try {
                 // Submit buffer to coordinator and get future
@@ -121,18 +123,18 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                 // When complete, send result to this client
                 future.whenComplete((result, error) -> {
                     if (error != null) {
-                        System.err.println("Sync round failed: " + error.getMessage());
+                        // System.err.println("Sync round failed: " + error.getMessage());
                         sendError("SYNC_FAILED", error.getMessage());
                         responseObserver.onCompleted();
                     } else if (result == null) {
-                        System.out.println("Empty sync round. Nothing to do...");
+                        // System.out.println("Empty sync round. Nothing to do...");
                     } else
                         sendSyncResult(result);
 
                 });
 
             } catch (Exception e) {
-                System.err.println("Failed to submit buffer for " + bufferNodeId + ": " + e.getMessage());
+                // System.err.println("Failed to submit buffer for " + bufferNodeId + ": " + e.getMessage());
                 sendError("SUBMIT_FAILED", e.getMessage());
                 responseObserver.onCompleted();
             }
@@ -143,7 +145,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
         }
 
         private void sendSyncResult(SyncCoordinator.SyncResult result) {
-            System.out.println("Sending SyncResult to " + this.nodeId + " for round " + result.getRoundId() + " (" + result.getOrderedEnvelopes().size() + " envelopes)");
+            System.out.println("  -> Sending result to " + this.nodeId + " (" + result.getOrderedEnvelopes().size() + " envelopes)");
 
             SyncResult.Builder builder = SyncResult.newBuilder()
                     .setRoundId(result.getRoundId());
@@ -191,12 +193,12 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
         }
 
         private void handleError(Error error) {
-            System.err.println("Client '" + this.nodeId + "' error [" + error.getCode() + "]: " + error.getMessage());
+            System.err.println("[ERROR] " + this.nodeId + " [" + error.getCode() + "]: " + error.getMessage());
         }
 
         @Override
         public void onError(Throwable t) {
-            System.err.println("Stream error for client " + this.nodeId + ": " + t.getMessage());
+            System.err.println("[ERROR] Stream error for " + this.nodeId + ": " + t.getMessage());
             if (registered) {
                 coordinator.unregisterClient(this.nodeId);
             }
@@ -204,7 +206,7 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         @Override
         public void onCompleted() {
-            System.out.println("Client " + this.nodeId + " closed connection");
+            // System.out.println("Client " + this.nodeId + " closed connection");
             if (registered) {
                 coordinator.unregisterClient(this.nodeId);
             }

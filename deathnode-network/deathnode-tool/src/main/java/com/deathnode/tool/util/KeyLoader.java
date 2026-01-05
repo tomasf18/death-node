@@ -75,7 +75,7 @@ public class KeyLoader {
      * Read RSA public key (X.509 format, DER-encoded).
      */
     public static PublicKey readRsaPublicKey(String publicKeyPath) throws Exception {
-        System.out.println("Reading RSA public key from: " + publicKeyPath);
+        // System.out.println("Reading RSA public key from: " + publicKeyPath);
         byte[] pubEncoded = readFile(publicKeyPath);
         X509EncodedKeySpec pubSpec = new X509EncodedKeySpec(pubEncoded);
         KeyFactory keyFac = KeyFactory.getInstance("RSA");
@@ -86,7 +86,7 @@ public class KeyLoader {
      * Read RSA private key (PKCS#8 format, DER-encoded).
      */
     public static PrivateKey readRsaPrivateKey(String privateKeyPath) throws Exception {
-        System.out.println("Reading RSA private key from: " + privateKeyPath);
+        // System.out.println("Reading RSA private key from: " + privateKeyPath);
         byte[] privEncoded = readFile(privateKeyPath);
         PKCS8EncodedKeySpec privSpec = new PKCS8EncodedKeySpec(privEncoded);
         KeyFactory keyFac = KeyFactory.getInstance("RSA");
@@ -97,7 +97,7 @@ public class KeyLoader {
      * Read Ed25519 public key (X.509 format, DER-encoded).
      */
     public static PublicKey readEd25519PublicKey(String publicKeyPath) throws Exception {
-        System.out.println("Reading Ed25519 public key from: " + publicKeyPath);
+        // System.out.println("Reading Ed25519 public key from: " + publicKeyPath);
         byte[] pubEncoded = readFile(publicKeyPath);
         X509EncodedKeySpec pubSpec = new X509EncodedKeySpec(pubEncoded);
         KeyFactory keyFac = KeyFactory.getInstance("Ed25519");
@@ -108,7 +108,7 @@ public class KeyLoader {
      * Read Ed25519 private key (PKCS#8 format, DER-encoded).
      */
     public static PrivateKey readEd25519PrivateKey(String privateKeyPath) throws Exception {
-        System.out.println("Reading Ed25519 private key from: " + privateKeyPath);
+        // System.out.println("Reading Ed25519 private key from: " + privateKeyPath);
         byte[] privEncoded = readFile(privateKeyPath);
         PKCS8EncodedKeySpec privSpec = new PKCS8EncodedKeySpec(privEncoded);
         KeyFactory keyFac = KeyFactory.getInstance("Ed25519");
