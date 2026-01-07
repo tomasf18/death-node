@@ -13,9 +13,9 @@ public class Config {
     // Sync configuration
     public static final int BUFFER_SIZE = 25;
     public static final int BUFFER_THRESHOLD_TO_SYNC = 3; // max buffered reports before triggering sync
-    public static final int SYNC_TIMEOUT_SECONDS = 10;   
+    public static final int SYNC_TIMEOUT_SECONDS = 9;   
     public static final int MAX_ENVELOPES_TO_SEND_PER_SYNC = BUFFER_SIZE;
-    public static final int INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS = 120; // seconds between checking for pending reports
+    public static final int INTERVAL_BETWEEN_PENDING_CHECKS_SECONDS = 100000; // seconds between checking for pending reports
 
     // Report content sizes
     public static final int MAX_SUBJECT_LENGTH = 32;

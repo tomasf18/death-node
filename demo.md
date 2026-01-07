@@ -2,6 +2,7 @@
 
 ### Note:
 - Leave server already working
+- leave folder explorer open on Node B for tampering
 
 ### 1. Initialization, report creation and listing
 
@@ -44,13 +45,13 @@
   * full verification pipeline,
   * block creation and broadcast.
 
-#### ----------------- 35s -----------------
+#### ----------------- 30s -----------------
 
 ### 3. Tampering detection (AEAD)
 
 **Actions:**
 
-1. On Node B: create one report
+1. On Node B: create one report -> REMEMBER THE FIRST CHARS OF THE HASH
 2. Manually modify one byte in the encrypted envelope on disk on the **metadata** field (e.g., change a letter on report ID)
 3. Trigger synchronization from Node B
 4. On Node A: list reports
@@ -61,7 +62,7 @@
 * Node A detects tampering **during decryption / verification**.
 * Demonstrates end-to-end integrity enforcement (SR2).
 
----
+#### ----------------- 60s -----------------
 
 ### 4. Monitor enforcement (Challenge B)
 
