@@ -123,7 +123,7 @@ public class ClientService {
         report.setStatus("pending_validation");
 
         // 2. Prepare metadata
-        long nextSeq = db.getLastSequenceNumber() + 1;
+        long nextSeq = db.getLastSequenceNumber(Config.getNodeSelfId()) + 1;
 
         String prevHash = db.getLastEnvelopeHash(Config.getNodeSelfId());
         if (prevHash == null) prevHash = "";

@@ -19,7 +19,7 @@ public class SyncRound {
     private String initiator;
     private Map<String, List<byte[]>> buffers = new HashMap<>();
     private List<PerNodeSignedBufferRoots> perNodeSignedBufferRoots = new ArrayList<>(); 
-    private CompletableFuture<SyncCoordinator.SyncResult> completionFuture = new CompletableFuture<>();
+    private CompletableFuture<SyncCoordinator.SyncResultObject> completionFuture = new CompletableFuture<>();
 
     public SyncRound(String roundId, Set<String> expectedNodes, String initiator) {
         this.roundId = roundId;
@@ -62,11 +62,11 @@ public class SyncRound {
         return new HashMap<>(buffers);
     }
 
-    public CompletableFuture<SyncCoordinator.SyncResult> getCompletionFuture() {
+    public CompletableFuture<SyncCoordinator.SyncResultObject> getCompletionFuture() {
         return completionFuture;
     }
 
-    public void complete(SyncCoordinator.SyncResult result) {
+    public void complete(SyncCoordinator.SyncResultObject result) {
         completionFuture.complete(result);
     }
 

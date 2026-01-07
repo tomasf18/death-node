@@ -12,8 +12,8 @@ spring:
   application:
     name: deathnode-server
   datasource:
-    url: jdbc:postgresql://192.168.0.200:5432/deathnode?ssl=true&sslmode=verify-full&sslrootcert=server-data/db-client/ca-cert.pem&sslcert=server-data/db-client/client-cert.pem&sslkey=server-data/db-client/client-key.pk8 # VM
-    # url: jdbc:postgresql://127.0.0.1:5432/deathnode?ssl=true&sslmode=verify-full&sslrootcert=server-data/db-client/ca-cert.pem&sslcert=server-data/db-client/client-cert.pem&sslkey=server-data/db-client/client-key.pk8
+    # url: jdbc:postgresql://192.168.0.200:5432/deathnode?ssl=true&sslmode=verify-full&sslrootcert=server-data/db-client/ca-cert.pem&sslcert=server-data/db-client/client-cert.pem&sslkey=server-data/db-client/client-key.pk8 # VM
+    url: jdbc:postgresql://127.0.0.1:5432/deathnode?ssl=true&sslmode=verify-full&sslrootcert=server-data/db-client/ca-cert.pem&sslcert=server-data/db-client/client-cert.pem&sslkey=server-data/db-client/client-key.pk8
     username: dn_admin
     password: dn_pass
     driver-class-name: org.postgresql.Driver

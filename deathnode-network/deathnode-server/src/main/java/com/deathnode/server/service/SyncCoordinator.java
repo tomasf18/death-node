@@ -21,6 +21,7 @@ import io.grpc.stub.StreamObserver;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.google.protobuf.ByteString;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -191,7 +192,7 @@ public class SyncCoordinator {
      * Submit a node's buffer to the active round.
      * Returns a future that completes when the round is finalized.
      */
-    public CompletableFuture<SyncResult> submitBufferAndRoot(String nodeId, List<byte[]> envelopes, byte[] bufferRoot, byte[] signedBufferRoot) {
+    public CompletableFuture<SyncCoordinator.SyncResultObject> submitBufferAndRoot(String nodeId, List<byte[]> envelopes, byte[] bufferRoot, byte[] signedBufferRoot) {
         synchronized (roundLock) {
             if (activeRound == null) {
                 return CompletableFuture.failedFuture(
@@ -281,7 +282,7 @@ public class SyncCoordinator {
      * For now: Simple timestamp-based ordering, no security checks.
      */
     @Transactional
-    protected SyncResult finalizeRound(SyncRound round) {
+    protected SyncCoordinator.SyncResultObject finalizeRound(SyncRound round) {
         System.out.println("\n[FINALIZATION] Round: " + round.getRoundId());
 
         // 1. Collect all envelopes with metadata
@@ -340,7 +341,7 @@ public class SyncCoordinator {
         }
         
         // 3. Build result
-        SyncResult result = new SyncResult();
+        SyncCoordinator.SyncResultObject result = new SyncCoordinator.SyncResultObject();
         result.setRoundId(round.getRoundId());
         
         byte[] blockRoot = MerkleUtils.computeMerkleRoot(orderedBytes);
@@ -379,11 +380,49 @@ public class SyncCoordinator {
                 (prevBlockRoot != null) ? HashUtils.bytesToHex(prevBlockRoot) : null
             );
 
-        pendingRound = new PendingRound(allEnvelopes, newSignedBlockMerkleRoot, allConnections.size());
+        pendingRound = new PendingRound(allEnvelopes, newSignedBlockMerkleRoot, round.getExpectedNodes().size());
 
         // 4. Complete the round's future
         round.getCompletionFuture().complete(result);
+        
+        broadcastSyncResult(result);
         return result;
+    }
+
+    private void broadcastSyncResult(SyncCoordinator.SyncResultObject result) {
+        // System.out.println("  -> Sending result to " + this.nodeId + " (" + result.getOrderedEnvelopes().size() + " envelopes)");
+
+        SyncResult.Builder builder = SyncResult.newBuilder()
+                .setRoundId(result.getRoundId());
+
+        // Add all ordered envelopes
+        for (byte[] env : result.getOrderedEnvelopes()) {
+            builder.addOrderedEnvelopes(ByteString.copyFrom(env));
+        }
+
+        builder.setBlockNumber(result.getBlockNumber());
+        builder.setBlockRoot(ByteString.copyFrom(result.getBlockRoot()));
+        builder.setSignedBlockRoot(ByteString.copyFrom(result.getSignedBlockRoot()));
+
+        for (SyncRound.PerNodeSignedBufferRoots nodeSignedBufferRoot : result.getPerNodeSignedBufferRoots()) {
+            SignedBufferRoot bufferRootMsg = SignedBufferRoot.newBuilder()
+                    .setNodeId(nodeSignedBufferRoot.getNodeId())
+                    .setBufferRoot(ByteString.copyFrom(HashUtils.hexToBytes(nodeSignedBufferRoot.getBufferRoot())))
+                    .setSignedBufferRoot(ByteString.copyFrom(HashUtils.hexToBytes(nodeSignedBufferRoot.getSignedBufferRoot())))
+                    .build();
+            builder.addPerNodeSignedBufferRoots(bufferRootMsg);
+        }
+
+        if (result.getPrevBlockRoot() != null) {
+            builder.setPrevBlockRoot(ByteString.copyFrom(result.getPrevBlockRoot()));
+        }
+
+        ServerMessage msg = ServerMessage.newBuilder()
+                .setSyncResult(builder.build())
+                .build();
+
+        // responseObserver.onNext(msg);
+        broadcast(msg);
     }
 
     /**
@@ -426,11 +465,12 @@ public class SyncCoordinator {
                         .build();
 
                 broadcast(msg);
+                pendingRound = null;
             }
         }
     }
 
-    private void broadcast(ServerMessage msg) {
+    public void broadcast(ServerMessage msg) {
         synchronized (roundLock) {
             String msgType = "Unknown";
             if (msg.hasRequestBuffer()) {
@@ -541,6 +581,10 @@ public class SyncCoordinator {
             return new VerificationsResult(false, "NODE_ID_MISMATCH", "Node ID in upload doesn't match connection");
         }
 
+        if (activeRound == null || !activeRound.getExpectedNodes().contains(bufferNodeId)) {
+            return new VerificationsResult(false, "ROUND_INACTIVE_OR_NODE_NOT_EXPECTED", "No active round or node not expected");
+        }
+
         System.out.println("\n[VERIFICATION PIPELINE] Buffer from " + bufferNodeId);
 
         Node node = nodeRepository.findByNodeId(bufferNodeId);
@@ -622,7 +666,7 @@ public class SyncCoordinator {
     /**
      * Result of a completed sync round.
      */
-    public static class SyncResult { // this message will be protected using gRPC with TLS
+    public static class SyncResultObject { // this message will be protected using gRPC with TLS
         private String roundId;
         private List<byte[]> orderedEnvelopes;
         private long blockNumber;

@@ -59,8 +59,8 @@ public class ReportCleanupService {
         String selfNodeId = Config.getNodeSelfId();
         System.out.println("Rolling back self node state for node ID: " + selfNodeId);
         DatabaseService.ReportRow report = databaseService.getLastSyncedReport(selfNodeId);
-        System.out.println("Last synced report: " + (report != null ? report.envelopeHash : "none") + ", global seq#: " + (report != null ? report.globalSequenceNumber : "N/A"));
-        databaseService.upsertNodeState(selfNodeId, report != null ? report.globalSequenceNumber : 0, report != null ? report.envelopeHash : null);
+        System.out.println("Last synced report: " + (report != null ? report.envelopeHash : "none") + ", node seq#: " + (report != null ? report.nodeSequenceNumber : "N/A"));
+        databaseService.upsertNodeState(selfNodeId, report != null ? report.nodeSequenceNumber : 0, report != null ? report.envelopeHash : null);
     }
 
     public CleanupResult cleanupAllUnsyncedReports() throws SQLException {

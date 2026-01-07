@@ -2,20 +2,16 @@ package com.deathnode.server.grpc;
 
 import com.deathnode.common.grpc.Error;
 import com.deathnode.common.grpc.SyncServiceGrpc;
-import com.deathnode.common.util.HashUtils;
 import com.deathnode.common.grpc.ClientMessage;
 import com.deathnode.common.grpc.ServerMessage;
 import com.deathnode.common.grpc.Hello;
-import com.deathnode.common.grpc.SignedBufferRoot;
 import com.deathnode.common.grpc.BufferUpload;
 import com.deathnode.common.grpc.Ack;
-import com.deathnode.common.grpc.SyncResult;
 import com.deathnode.server.service.SyncCoordinator;
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
 
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import com.google.protobuf.ByteString;
@@ -28,8 +24,7 @@ import com.google.protobuf.ByteString;
  * 2. Registers client with coordinator
  * 3. Sends RequestBuffer to client
  * 4. Receives BufferUpload from client
- * 5. When all nodes have uploaded, computes SyncResult
- * 6. Sends SyncResult to all clients
+ * 5. When all nodes have uploaded, if an error occurs, sends Error to all clients
  */
 @GrpcService
 public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
@@ -118,9 +113,9 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
             // System.out.println("Received buffer upload from " + bufferNodeId + " with " + upload.getEnvelopesCount() + " envelopes");
 
             try {
-                // Submit buffer to coordinator and get future
-                CompletableFuture<SyncCoordinator.SyncResult> future = coordinator.submitBufferAndRoot(bufferNodeId, envelopes, bufferRoot, signedBufferRoot);
-                // When complete, send result to this client
+                // Subnit buffer to coordinator and get future
+                CompletableFuture<SyncCoordinator.SyncResultObject> future = coordinator.submitBufferAndRoot(bufferNodeId, envelopes, bufferRoot, signedBufferRoot);
+                // When complete, check inf an error occurred. If so, send Error to client. If not, the result have already been broadcasted by SyncCoordinator
                 future.whenComplete((result, error) -> {
                     if (error != null) {
                         // System.err.println("Sync round failed: " + error.getMessage());
@@ -128,8 +123,9 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
                         responseObserver.onCompleted();
                     } else if (result == null) {
                         // System.out.println("Empty sync round. Nothing to do...");
-                    } else
-                        sendSyncResult(result);
+                    } else{
+                        // sendSyncResult(result);
+                    }
 
                 });
 
@@ -142,41 +138,6 @@ public class SyncServiceImpl extends SyncServiceGrpc.SyncServiceImplBase {
 
         private void handleBlockAck(Ack blockAck) {
             coordinator.receivePeerAck(blockAck.getSuccess());
-        }
-
-        private void sendSyncResult(SyncCoordinator.SyncResult result) {
-            System.out.println("  -> Sending result to " + this.nodeId + " (" + result.getOrderedEnvelopes().size() + " envelopes)");
-
-            SyncResult.Builder builder = SyncResult.newBuilder()
-                    .setRoundId(result.getRoundId());
-
-            // Add all ordered envelopes
-            for (byte[] env : result.getOrderedEnvelopes()) {
-                builder.addOrderedEnvelopes(ByteString.copyFrom(env));
-            }
-
-            builder.setBlockNumber(result.getBlockNumber());
-            builder.setBlockRoot(ByteString.copyFrom(result.getBlockRoot()));
-            builder.setSignedBlockRoot(ByteString.copyFrom(result.getSignedBlockRoot()));
-
-            for (SyncRound.PerNodeSignedBufferRoots nodeSignedBufferRoot : result.getPerNodeSignedBufferRoots()) {
-                SignedBufferRoot bufferRootMsg = SignedBufferRoot.newBuilder()
-                        .setNodeId(nodeSignedBufferRoot.getNodeId())
-                        .setBufferRoot(ByteString.copyFrom(HashUtils.hexToBytes(nodeSignedBufferRoot.getBufferRoot())))
-                        .setSignedBufferRoot(ByteString.copyFrom(HashUtils.hexToBytes(nodeSignedBufferRoot.getSignedBufferRoot())))
-                        .build();
-                builder.addPerNodeSignedBufferRoots(bufferRootMsg);
-            }
-
-            if (result.getPrevBlockRoot() != null) {
-                builder.setPrevBlockRoot(ByteString.copyFrom(result.getPrevBlockRoot()));
-            }
-
-            ServerMessage msg = ServerMessage.newBuilder()
-                    .setSyncResult(builder.build())
-                    .build();
-
-            responseObserver.onNext(msg);
         }
 
         private void sendError(String code, String message) {

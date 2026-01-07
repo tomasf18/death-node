@@ -356,11 +356,16 @@ public class PersistentSyncClient {
         private void handleRequestBuffer(RequestBuffer request) {
             // Cancel timeout monitoring - server answered in time
             cancelTimeoutMonitoring("Server buffer request received in time");
-
             String roundId = request.getRoundId();
             //System.out.println("Server requested buffer for round: " + roundId + " - sending " + pendingEnvelopes.size() + " envelopes");
             System.out.println("\n  <- Server requested buffer for round: " + roundId);
 
+            // // MONITOR SIMULATION: simulate dropped outgoing messages for nodeB (receives but doesn't send)
+            // if (Config.getNodeSelfId().equals("nodeB")) {
+            //     System.out.println("[SIMULATION] nodeB: Dropping outgoing BufferUpload message");
+            //     startTimeoutMonitoring(roundId);
+            //     return; // don't send response, simulating network drop
+            // }
 
             try {
                 // Build BufferUpload
