@@ -51,19 +51,19 @@ public class Main {
             try {
                 switch (command) {
 
-                    case "create-report":
+                    case "create-report", "cr": 
                         clientService.createReportInteractive(sc);
                         break;
 
-                    case "create-random":
+                    case "create-random", "crand": 
                         clientService.createRandomReport();
                         break;
 
-                    case "list-reports":
+                    case "list-reports", "lr": 
                         clientService.listReports();
                         break;
 
-                    case "sync":
+                    case "sync", "s":
                         clientService.syncReports();
                         System.out.println();
                         break;
@@ -72,12 +72,11 @@ public class Main {
                     //     clientService.resetDatabase();
                     //     break;
 
-                    case "help":
+                    case "help", "h":
                         printHelp();
                         break;
 
-                    case "q":
-                    case "exit":
+                    case "q", "exit":
                         System.out.println("Shutting down client.");
                         sc.close();
                         clientService.shutdown();
