@@ -237,7 +237,7 @@ mvn clean install
 
 #### 5. Clone VMs
 
-Power off the base VM and clone it 4 times following [these instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#21-clone-virtual-machines):
+Power off the base VM and clone it 4 times following [these instructions](https://github.com/tomasf18/NetCompSec-practical/blob/main/4-Virtual-Networking/README.md?tab=readme-ov-file#21-clone-virtual-machines):
 - **Server**
 - **Database**
 - **Monitor**
@@ -256,7 +256,7 @@ For each VM, configure network adapters as shown:
 | NodeA | sw1 | - | - |
 | NodeB | sw2 | - | - |
 
-Follow [VirtualBox network configuration instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#22a-virtualbox).
+Follow [VirtualBox network configuration instructions](https://github.com/tomasf18/NetCompSec-practical/blob/main/4-Virtual-Networking/README.md?tab=readme-ov-file#22a-virtualbox).
 
 ---
 
