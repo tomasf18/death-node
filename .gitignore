@@ -322,7 +322,7 @@ _old
 .mtj.tmp/
 
 # Package Files #
-#*.jar
+.jar
 *.war
 *.ear
 *.zip
@@ -346,6 +346,7 @@ build/
 
 # Maven
 target/
+generated-sources/
 
 
 ######################
