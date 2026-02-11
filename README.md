@@ -32,7 +32,7 @@
 
 This project addresses the **DeathNode scenario** from the [SIRS Project Scenarios](resources/docs/Project-Scenarios.md), implementing **Challenge B**: a vigilant server monitoring system to detect and prevent flooding attacks while maintaining system availability.
 
-### Design Philosophy
+### Design
 
 DeathNode operates as a **centralized synchronization model** where client nodes exchange reports through a central server. The server is intentionally **untrusted** with report contents - all reports are encrypted end-to-end and remain confidential to authorized nodes only. The system prioritizes:
 
