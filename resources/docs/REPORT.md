@@ -1,4 +1,4 @@
-# A53 DeathNode Project Report
+# DeathNode Project Report
 
 ## **1. Introduction**
 

@@ -1,225 +1,355 @@
-# A53 DeathNode
+# Network and Computer Security: DeathNode
 
-## Team
+### `Grade: 19.0/20`
 
-| Number | Name           | User                                      | E-mail                                          |
-|--------|----------------|-------------------------------------------|-------------------------------------------------|
-| 116496 | Guilherme Pais | <https://github.com/Guilherme-Parentesco> | <mailto:guilherme.p.pais@tecnico.ulisboa.pt>    |
-| 116122 | Tomás Santos   | <https://github.com/tomasf18>             | <mailto:tomas.santos.f@tecnico.ulisboa.pt>      |
-| 116390 | Pedro Duarte   | <https://github.com/pedropmad>            | <mailto:pedro.alegre.duarte@tecnico.ulisboa.pt> |
+<div align="center">
 
-![Guilherme Pais](resources/img/Guilherme.png) ![Tomás Santos](resources/img/Tomas.jpg) ![Pedro Duarte](resources/img/Pedro.jpg)
+**An anonymous, secure distributed reporting platform with end-to-end encryption and advanced consistency guarantees**
 
+[Demo Video](https://drive.google.com/file/d/1brFnYBAC51IwPCIoNh3Bd1s2n_srq8wr/view?usp=sharing) • [Project Specification](resources/docs/Project-Specification.md) • [Detailed Report](resources/docs/REPORT.md)
 
-## Contents
+</div>
 
-This repository contains documentation and source code for the *Network and Computer Security (SIRS)* project scenario **DeathNode**.
+---
 
-The [REPORT](resources/docs/REPORT.md) document provides a detailed overview of the key technical decisions and various components of the implemented project.
-It offers insights into the rationale behind these choices, the project's architecture, and the impact of these decisions
-on the overall functionality and performance of the system.
+## Table of Contents
 
-This document presents installation and demonstration instructions.
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [Project Structure](#-project-structure)
+- [Architecture](#-architecture)
+- [Getting Started](#-getting-started)
+- [Security Mechanisms](#-security-mechanisms)
+- [Technologies](#-technologies)
+- [Resources](#-resources)
+- [Authors](#-authors)
 
-All virtual machines are based on Debian 64-bit Linux, and the software stack includes:
-- **Java 17+** and **Maven 3.x** for building and running the server and nodes applications. 
-- **Docker** for running the **PostgreSQL** database container.
-- **Python3** for the monitor to sniff packets. 
-- **iptables** for configuring firewall rules and network forwarding between server, nodes, and monitor. 
-- **Boot scripts** (`boot-config.sh`) for each machine, which configure static IP addresses, subnets, 
-and firewall rules specific to each role (server, database, monitor).
+---
 
-## Installation
+## Overview
 
-To see the project in action, it is necessary to set up a virtual environment, with 3 networks (sw0, sw1, sw2) and 5 machines:   
-- Main server (sw0);
-- Database (sw0);
-- Monitor (sw0, sw1 and sw2);
-- 2 clients (sw1 and sw2, one for each client).
+**DeathNode** is a secure, distributed anonymous reporting platform developed as part of the Network and Computer Security (SIRS) course at Instituto Superior Técnico. The system enables participants of a clandestine group to submit encrypted reports about alleged crimes or suspects before information reaches authorities, while maintaining full anonymity and ensuring data integrity.
 
-#### The following diagram shows the networks and machines:
+This project addresses the **DeathNode scenario** from the [SIRS Project Scenarios](resources/docs/Project-Scenarios.md), implementing **Challenge B**: a vigilant server monitoring system to detect and prevent flooding attacks while maintaining system availability.
 
-![](resources/img/Network_Diagram.png)
+### Design Philosophy
 
-## Prerequisites
+DeathNode operates as a **centralized synchronization model** where client nodes exchange reports through a central server. The server is intentionally **untrusted** with report contents - all reports are encrypted end-to-end and remain confidential to authorized nodes only. The system prioritizes:
 
-All the virtual machines are based on: Linux debian 64-bit 
+- **Strong cryptographic guarantees** over user convenience
+- **Consistency and integrity** over availability (fail-secure approach)
+- **Defense-in-depth** through multiple independent security layers
 
-**Download the official Kali Linux distribution:**
-- **Virtual Box**: [Download](hhttps://cdimage.kali.org/kali-2025.4/kali-linux-2025.4-virtualbox-amd64.7z) and [Instructions](https://www.kali.org/docs/virtualization/import-premade-virtualbox/)
-- **VMware**: [Download](https://cdimage.kali.org/kali-2025.4/kali-linux-2025.4-vmware-amd64.7z) and [Instructions](https://www.kali.org/docs/virtualization/import-premade-vmware/)
+---
 
-**After the base virtual machine is installed and running, update the system:**
+## Key Features
+
+### Core Security Guarantees
+
+- **SR1 - Confidentiality**: End-to-end encryption using AES-256-GCM ensures only authorized network participants can decrypt reports
+- **SR2 - Individual Integrity**: Tamper-evident reports with Ed25519 digital signatures prevent unauthorized modifications
+- **SR3 - Batch Integrity**: Per-sender hash chains and Merkle tree commitments detect missing, duplicated, or out-of-order reports
+- **SR4 - Consistency**: Cryptographic block chaining and signed commitments prevent forged or diverging histories
+
+### Advanced Security Features
+
+- **Mutual TLS (mTLS)** authentication for all network communications
+- **Two-level key architecture** separating transport and application-layer security
+- **Multi-stage verification pipeline** for synchronization integrity
+- **Flooding attack detection** with dynamic temporary banning via vigilant monitor
+- **At-rest data integrity** verification with on-demand tamper detection
+
+### System Capabilities
+
+- Pseudonymous report submission with no user authentication
+- Distributed report storage with periodic synchronization
+- Network segmentation with strict firewall policies
+- Real-time intrusion detection and traffic monitoring
+- Comprehensive audit trails and cryptographic proof chains
+
+---
+
+## Project Structure
+
+```
+death-node/
+├── deathnode-network/          # Main project directory
+│   ├── deathnode-client/       # Client node implementation
+│   │   ├── src/main/java/      # Client-side application logic
+│   │   ├── client-data/        # Local encrypted report storage
+│   │   ├── boot-config*.sh     # Network configuration scripts
+│   │   └── pom.xml
+│   ├── deathnode-server/       # Central synchronization server
+│   │   ├── src/main/java/      # Server-side gRPC services
+│   │   ├── server-data/        # TLS certificates and keys
+│   │   └── pom.xml
+│   ├── deathnode-common/       # Shared protocol definitions
+│   │   ├── src/main/proto/     # Protocol Buffer schemas
+│   │   └── src/main/java/      # Common models and utilities
+│   ├── deathnode-database/     # PostgreSQL database setup
+│   │   ├── server_schema.sql   # Database initialization
+│   │   ├── setup-db.sh         # Docker container script
+│   │   └── boot-config.sh
+│   ├── deathnode-monitor/      # Vigilant IDS/router
+│   │   ├── monitor.py          # Traffic analysis (Python/Scapy)
+│   │   └── boot-config.sh
+│   ├── deathnode-tool/         # Secure document library & CLI
+│   │   ├── src/main/java/      # Cryptographic operations
+│   │   └── README.md           # Tool documentation
+│   ├── generate-all-keys.sh    # PKI and key generation script
+│   └── pom.xml                 # Parent Maven configuration
+├── resources/
+│   ├── docs/                   # Project documentation
+│   │   ├── REPORT.md           # Comprehensive technical report
+│   │   ├── Project-Specification.md
+│   │   ├── Project-Scenarios.md
+│   │   └── DEMO.url            # Video demonstration link
+│   └── img/                    # Diagrams and screenshots
+└── README.md
+```
+
+### Key Components
+
+- **`deathnode-client/`**: Client nodes that create, encrypt, and synchronize reports
+- **`deathnode-server/`**: Central server coordinating synchronization rounds
+- **`deathnode-common/`**: Shared Protocol Buffer definitions and domain models
+- **`deathnode-database/`**: PostgreSQL container for persistent metadata storage
+- **`deathnode-monitor/`**: Vigilant gateway detecting flooding attacks
+- **`deathnode-tool/`**: Cryptographic library implementing secure document format
+
+---
+
+## Architecture
+
+### Network Topology
+
+The system consists of **5 virtual machines** across **3 isolated networks**:
+
+![Network Diagram](resources/img/Network_Diagram.png)
+
+| Machine | Network(s) | Role | IP Address |
+|---------|-----------|------|------------|
+| **Server** | sw0 | Central synchronization coordinator | 192.168.0.100 |
+| **Database** | sw0 | PostgreSQL data persistence | 192.168.0.200 |
+| **Monitor** | sw0, sw1, sw2 | IDS/Gateway with NAT forwarding | 192.168.0.1 (sw0)<br>192.168.1.1 (sw1)<br>192.168.2.1 (sw2) |
+| **NodeA** | sw1 | Client node (AlphaNode) | 192.168.1.101 |
+| **NodeB** | sw2 | Client node (BetaNode) | 192.168.2.101 |
+
+### Communication Channels
+
+1. **Client ↔ Server**: Bidirectional gRPC streaming over TLS 1.3 with mutual authentication
+2. **Server ↔ Database**: JDBC over TLS with client certificate authentication (CN=`dn_admin`)
+3. **Monitor**: Transparent NAT gateway with iptables-based firewall and intrusion detection
+
+### Security Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Application Layer (User-Level Crypto)                  │
+│ • AES-256-GCM encryption (report confidentiality)      │
+│ • Ed25519 signatures (integrity & authenticity)        │
+│ • Hash chains (per-sender ordering)                    │
+│ • Merkle trees (batch commitments)                     │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│ Transport Layer (TLS 1.3 mTLS)                         │
+│ • RSA-2048 server/client certificates                  │
+│ • X.509 PKI with self-signed CA                        │
+│ • Perfect Forward Secrecy (PFS)                        │
+└─────────────────────────────────────────────────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────┐
+│ Network Layer (Firewall & Segmentation)                │
+│ • iptables strict ingress/egress rules                 │
+│ • Network isolation (sw0/sw1/sw2)                      │
+│ • Monitor-enforced traffic control                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+For detailed architectural decisions and threat model analysis, see the [Technical Report](resources/docs/REPORT.md).
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+**Base Requirements:**
+- Linux Debian 64-bit (Kali Linux recommended)
+- Virtualization platform: VirtualBox or VMware
+- Minimum 5 VMs (or 1 base VM to clone)
+
+**Software Stack:**
+- Java 21+
+- Maven 3.9+
+- Docker 20.10+
+- Python 3.11+ (with Scapy)
+- PostgreSQL 18.0
+- iptables
+
+### Installation
+
+#### 1. Download and Configure Base VM
+
+Download the official Kali Linux distribution:
+- **VirtualBox**: [Download](https://cdimage.kali.org/kali-2025.4/kali-linux-2025.4-virtualbox-amd64.7z) | [Instructions](https://www.kali.org/docs/virtualization/import-premade-virtualbox/)
+- **VMware**: [Download](https://cdimage.kali.org/kali-2025.4/kali-linux-2025.4-vmware-amd64.7z) | [Instructions](https://www.kali.org/docs/virtualization/import-premade-vmware/)
+
+Update the system:
 ```sh
 sudo apt update && sudo apt upgrade -y
 ```
 
-Install the required base packages:
+Install base packages:
 ```sh
-sudo apt install -y \
-  ca-certificates \
-  curl \
-  gnupg \
-  lsb-release \
-  git
+sudo apt install -y ca-certificates curl gnupg lsb-release git
 ```
 
-Also have to clone the project, and enter in the `deathnode-network` folder:
+#### 2. Clone the Project
+
 ```sh
 git clone https://github.com/tecnico-sec/A53-DeathNode.git
 cd A53-DeathNode/deathnode-network
 ```
 
-Use the script `requirements.sh` to install the extra requirements
-to be able to run correctly the system:
+#### 3. Install Dependencies
+
+Run the automated installation script:
 ```sh
 chmod +x requirements.sh
 ./requirements.sh
 ```
 
-Verify the installations:
+Verify installations:
 ```sh
-java -version
-mvn -version
-docker --version
-pytohn3 --version
+java -version    # Expected: openjdk 21+
+mvn -version     # Expected: Apache Maven 3.9+
+docker --version # Expected: Docker 20.10+
+python3 --version # Expected: Python 3.11+
 ```
 
-Lastly, compile the maven project:
+#### 4. Build the Project
+
 ```sh
 mvn clean install
 ```
 
-**Once the base virtual machine is fully configured:**
-1. Power off the VM
-2. Clone it, following these [instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#21-clone-virtual-machines), to create the remaining machines:
-   - **Server**
-   - **Database**
-   - **Monitor**
-   - **NodeA**
-   - **NodeB**
-3. After cloning, update each network configuration using these [instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#22a-virtualbox), and follow these requirements:
-    - **Server and Database**: one adapter for `sw0`
-    - **Monitor**: three adaptares, first for `sw0`, second for `sw1` and third for `sw2`
-    - **NodeA**: one adapter for `sw1`
-    - **NodeB**: one adapter for `sw2`
+#### 5. Clone VMs
 
-## Machine configurations
+Power off the base VM and clone it 4 times following [these instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#21-clone-virtual-machines):
+- **Server**
+- **Database**
+- **Monitor**
+- **NodeA**
+- **NodeB**
 
-For each machine, there is a **boot script** named `boot-config.sh` that configures the network and firewall rules specific
-to that machine. This script sets a static IP in the appropriate subnet and applies firewall rules required
-for the machine to communicate with the others.
+#### 6. Configure Network Adapters
 
-More detailed information about these rules is available in [REPORT.md](resources/docs/REPORT.md).
+For each VM, configure network adapters as shown:
 
-Next we have custom instructions for each machine.
+| VM | Adapter 1 | Adapter 2 | Adapter 3 |
+|----|-----------|-----------|-----------|
+| Server | sw0 | - | - |
+| Database | sw0 | - | - |
+| Monitor | sw0 | sw1 | sw2 |
+| NodeA | sw1 | - | - |
+| NodeB | sw2 | - | - |
 
-### Machine 1 - Database Server
+Follow [VirtualBox network configuration instructions](https://github.com/tecnico-sec/Virtual-Networking?tab=readme-ov-file#22a-virtualbox).
 
-This machine runs a PostgreSQL 18.0 database server inside a Docker container.
+---
 
-Run the boot script inside the `deathnode-database/` folder:
+### Machine Configuration
+
+Each machine requires specific configuration via boot scripts. Execute commands **in order**:
+
+#### Machine 1: Database Server
+
 ```sh
 cd deathnode-database
 sudo ./boot-config.sh
-```
-
-Run the container:
-```sh
 sudo ./setup-db.sh
 ```
 
-To verify if the container is running:
-```sh
-sudo docker ps
-```
+**Verify:** `sudo docker ps` should show `postgres:18` running.
 
-The expected results are:
-- No connection errors.
-- Container running with postgreSQL:18
+---
 
-### Machine 2 - Server
-This machine runs the Deathnode application server using Spring Boot.
+#### Machine 2: Application Server
 
-Run the boot script inside the `deathnode-server/` folder:
 ```sh
 cd deathnode-server
 sudo ./boot-config.sh
 ```
 
-Try to communicate with the DB server and apply Database Schema:
+Initialize database schema:
 ```sh
 psql -h 192.168.0.200 -U dn_admin -d deathnode -f ../deathnode-database/server_schema.sql
+# Password: dn_pass
 ```
-> Password for user dn_admin: dn_pass
 
-Initialize Application Server:
+Start server:
 ```sh
 mvn spring-boot:run
 ```
 
-The expected results are:
-- Application starts without errors.
-- Connection to the database is successful.
+**Verify:** Server starts without errors and connects to database.
 
-### Machine 3 - Monitor
-These machine run the monitor server, which serve as IDS and router at same time, to route packets 
-from nodes to the server and prevent spam attacks.
+---
 
-The initialization is the same, run the file `boot-config` in the folder `deathnode-monitor`:
+#### Machine 3: Monitor (IDS/Gateway)
+
 ```sh
 cd deathnode-monitor
-./boot-config
-```
-
-After the initialization, run the python script in the same folder to start monitoring packets:
-```sh
+sudo ./boot-config.sh
 python3 monitor.py
 ```
 
-The expected results are:
-- Command line interface capturing all the traffic between the nodes and the server.
+**Verify:** Monitor displays packet capture interface.
 
-### Machine 4, 5 - Nodes
-These machines run the DeathNode nodes, which communicate with the server.
-The initialization is mostly the same; the only difference is the boot script used:
-- **NodeA** uses `boot1-config.sh`
-- **NodeB** uses `boot2-config.sh`
+---
 
-Initialize, run the respective boot script on each client inside the `deathnode-client/` folder:
+#### Machine 4 & 5: Client Nodes
+
+**NodeA:**
 ```sh
 cd deathnode-client
-sudo ./boot1-config.sh   # for Client 1
-sudo ./boot2-config.sh   # for Client 2
+sudo ./boot-config1.sh
+java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
 ```
 
-Inside the client project directory run the client JAR with the appropriate arguments:
+**NodeB:**
 ```sh
-java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"   # Node 1
-java -jar target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"    # Node 2
+cd deathnode-client
+sudo ./boot-config2.sh
+java -jar target/deathnode-client-1.0.0.jar "nodeB" "BetaNode"
 ```
 
-The expected results are:
-- Each client starts and registers itself with the server.
-- No connection errors should appear in the console.
-- Client can use the commands `create-reports` and most important sync them with the server using the `sync` command
+**Verify:** Nodes connect to server through monitor without errors.
+
+---
 
 ## Demonstration
 
-Now that all networks and virtual machines are correctly configured and running, this section demonstrates the main features 
-of the DeathNode system and highlights the security mechanisms in action.
+With all networks and virtual machines properly configured and operational, this section provides a comprehensive walkthrough of the DeathNode system's core capabilities and security features. The demonstration showcases the complete lifecycle of report creation, synchronization, and integrity verification, while highlighting the system's defense mechanisms against common attacks.
 
-All commands in this demonstration are executed on a client machine, while screenshots are provided to show the
-corresponding outputs on the server and on the monitor (vigilant).
+**Note**: All commands shown are executed from client node terminals. Screenshots display corresponding outputs from the server, client nodes, and the vigilant monitor to illustrate the end-to-end flow of operations.
 
-### Node Application Overview
-The node application provides an interactive command-line interface. It can be launched as follows:
+### 1. Node Initialization and Connection Establishment
+
+The client node application provides an interactive command-line interface for all operations. To launch a node:
 
 ```sh
 cd deathnode-client/
 java -jar target/deathnode-client-1.0.0.jar "nodeA" "AlphaNode"
 ```
-Upon startup, the node connects to the server through the monitor and waits for user commands.
+
+**What happens during startup:**
+- The node establishes a secure mTLS connection to the server through the monitor gateway
+- TLS handshake with mutual certificate authentication (client and server verify each other)
+- Initial synchronization request to retrieve the latest global state
+- Node enters ready state, awaiting user commands
 
 <p align="center">
   <img src="resources/img/server_init.png" width="25%" style="margin-right: 5rem"/>
@@ -229,24 +359,52 @@ Upon startup, the node connects to the server through the monitor and waits for 
      <img src="resources/img/monitor-init.png" width="35%" />
 </p>
 <p align="center">
-  <em>Server with the client connection (left) and NodeA connected successfully with the Server (right) <br>This monitor displays the first sync request from Node A during its initial connection to the server (bottom
-</em>
+  <em>Server successfully accepts the incoming mTLS connection from NodeA (left) • NodeA establishes connection and enters interactive mode (right)<br>
+Monitor captures and forwards the initial sync request, demonstrating its transparent gateway role (bottom)</em>
 </p>
 
+---
 
-### Creating a Report
-The `create-report` command allows a node to create a new report providing:
-`Suspect`; `Description` and `Location`. After the envelope is created and stored in buffer, outputting the name and the
-local seq number
+### 2. Creating and Synchronizing Reports
+
+#### Step 2.1: Report Creation
+
+The `create-report` command enables nodes to submit new reports to the network. The command prompts for three required fields:
+
+1. **Suspect**: Identifier of the individual or entity being reported
+2. **Description**: Details of the alleged crime or suspicious activity
+3. **Location**: Geographic location associated with the report
+
+Upon submission, the system performs the following operations:
+- Generates a unique `report_id` and assigns a per-sender `node_sequence_number`
+- Computes `prev_envelope_hash` linking to the previous report (hash chain)
+- Encrypts the report using a fresh AES-256 DEK, wrapped for all authorized recipients
+- Signs the envelope with the node's Ed25519 private key
+- Stores the encrypted envelope locally and adds it to the unsynced buffer
 
 <p align="center">
   <img src="resources/img/create-report.png" width="50%" />
 </p>
 <p align="center">
-  <em>The client prints the created report</em>
+  <em>Interactive report creation showing user input and successful envelope generation with assigned sequence number</em>
 </p>
 
-After the threshold is achieved of the buffer size, the sync is requested from the NodeA and the server initiate the `sync round` for all Nodes in the network, if no other round is active.
+#### Step 2.2: Automatic Synchronization Trigger
+
+When the local buffer reaches a predefined threshold (default: 3 reports), the node automatically initiates a synchronization round:
+
+1. **Client computes Merkle root** over buffered envelopes and signs it
+2. **Sync request** sent to server (via monitor) with signed commitment
+3. **Server collects buffers** from all active nodes
+4. **Server verification**:
+   - Validates node signatures on Merkle roots
+   - Recomputes roots to verify buffer integrity
+   - Checks hash chain continuity per sender
+5. **Global ordering** by metadata timestamp
+6. **Block creation** with cryptographic commitment to the ordering
+7. **Broadcast** of `SyncResult` containing ordered envelopes and block proof
+8. **Client verification** through 6-stage pipeline (block signature, chain continuity, Merkle root, buffer signatures, hash chains, individual envelope decryption)
+
 <p align="center">
   <img src="resources/img/node-trigger-sync.png" width="35%" style="margin-right: 5rem"/>
   <img src="resources/img/server-sync-round.png" width="40%" />
@@ -255,67 +413,231 @@ After the threshold is achieved of the buffer size, the sync is requested from t
      <img src="resources/img/wire-syncRequest.png" width="50%" />
 </p>
 <p align="center">
-  <em>The NodeA triggers the sync process and subsequently receives the ordered report from the server (left) and the server receives the sync request, processes it correctly, and sends a response back to the NodeA. (right)<br>
-The Wireshark application shows the packet capture during sync, demonstrating that the communication is encrypted using TLS and that the content is not disclosed (bottom)
-</em>
+  <em>NodeA initiates sync and receives the globally ordered reports from the server (left) • Server processes the sync round, verifies all commitments, and broadcasts the result (right)<br>
+Wireshark capture confirms TLS 1.3 encryption—all application data is protected from eavesdropping (bottom)</em>
 </p>
 
-Listing the reports, using the command `list-reports` we can see if the report is sync with the server and with the others Nodes,
-by verifying the `global_seq` attribute:
+#### Step 2.3: Verification of Synchronization
+
+The `list-reports` command displays all locally stored reports with their synchronization status. Key attributes to verify:
+
+- **`local_seq`**: Per-node sequence number (monotonically increasing)
+- **`global_seq`**: Position in the global total order (assigned by server)
+- **`hash`**: Envelope cryptographic fingerprint (detects tampering)
+
+If `global_seq` is present, the report has been successfully synchronized across all nodes in the network.
+
 <p align="center">
   <img src="resources/img/list-reports.png" width="60%" />
 </p>
 
+---
 
-### Creating Random Reports (Simulated Flood)
-The `create-random` command generates multiple reports automatically. This command is used to simulate abusive
-behavior and trigger the security mechanisms. The command asks for one input, the number of reports to generate.
+### 3. Flooding Attack Detection and Mitigation
+
+#### Challenge B: Vigilant Monitor in Action
+
+The `create-random` command simulates an abusive node attempting to flood the network with spam reports. This triggers the monitor's intrusion detection system (IDS):
+
+**Attack simulation:**
+```
+> create-random
+Number of reports: 100
+```
+
+**Monitor detection logic:**
+- Tracks synchronization request frequency per node in a 30-second sliding window
+- **First violation**: If a second sync request arrives within 30s of the first, the node is flagged
+- **Immediate response**: Monitor adds an iptables rule to drop all packets from the offending IP
+- **Exponential backoff**: Block duration doubles with each subsequent violation (30s → 60s → 120s → ...)
+- **Automatic recovery**: Rules expire after timeout, allowing legitimate nodes to recover from transient issues
+
+This design balances security (preventing DoS attacks) with availability (temporary blocks rather than permanent bans).
 
 <p align="center">
    <img src="resources/img/create-random.png" width="40%" style="margin-right: 5rem"/>
    <img src="resources/img/monitor-block-Node.png" width="40%" />
 </p>
 <p align="center">
-<em>The NodeA is using an abusive command and sending multiple synchronization requests in a spam-like manner. (left)<br>
-The monitor blocks the Node's requests and adds a temporary firewall rule to drop packets from the abusive Node.
-If the abusive behavior continues after the timeout, the duration of the blocking rule is progressively increased (right)
-</em>
+<em>NodeA executes the flooding simulation, rapidly creating 100 reports and triggering multiple sync requests (left)<br>
+Monitor detects the anomalous behavior and enforces a temporary network-level block via dynamic iptables rules (right)</em>
 </p>
 
-### Security measures
-One of the most important requirements in our system is information integrity, and order. With the development of our Secure Document Tool,
-whenever any byte of information is modified, the other nodes are able to detect that the integrity has been compromised.
+---
 
-When we change, for example, the `report_id` in the `metadata` and attempt to sync with the server,
-the synchronization proceeds normally, but the other nodes can detect that the report is invalid.
+### 4. Security Guarantees in Action
+
+#### 4.1 Data Integrity Verification (SR2)
+
+DeathNode's cryptographic design ensures **tamper-evident** reports. Any modification to encrypted envelope files—whether malicious or accidental—is immediately detectable.
+
+**Demonstration:**
+1. Manually edit a byte in any field of an encrypted envelope (e.g., change `report_id` in metadata)
+2. Attempt to decrypt and list reports using `list-reports`
+3. **Result**: AES-GCM authentication fails or signature verification fails, depending on what was modified
+
+**Why this works:**
+- Metadata is bound to ciphertext as **Additional Authenticated Data (AAD)** in AES-GCM
+- Ed25519 signature covers both plaintext and metadata
+- Any change to either breaks cryptographic verification
 
 <p align="center">
    <img src="resources/img/report-modified.png" width="45%" style="margin-right: 2rem"/>
    <img src="resources/img/integrity.png" width="50%" />
 </p>
 <p align="center">
-<em>The unaltered report, where we will change only the report_id or another attribute. (left)
-and when performing list-reports, a hash mismatch error is displayed. (right)</em>
+<em>Original encrypted envelope before tampering (left) • Integrity check failure displayed when attempting to list the modified report—hash mismatch immediately detected (right)</em>
 </p>
 
-In addition to integrity, we also demonstrate how the nodes can detect `if the order of reports has been altered` and cancel the corresponding synchronization round.
+#### 4.2 Ordering and Consistency Verification (SR3, SR4)
+
+The per-sender hash chain and global block chain together prevent:
+- **Missing reports**: Hash chain breaks if a report is omitted
+- **Duplicates**: Sequence numbers prevent replay attacks
+- **Reordering**: Hash pointers enforce strict ordering
+- **Equivocation**: Server cannot present different histories to different nodes (block commitments are signed)
+
+**Demonstration of order tampering detection:**
+
+If the server (or an attacker) attempts to reorder reports or present inconsistent histories, clients detect the violation during the 6-stage verification pipeline and reject the entire sync round.
+
 <p align="center">
   <img src="resources/img/error-order.png" width="60%" />
 </p>
+<p align="center">
+  <em>Client detects and rejects a synchronization round where report ordering violates hash chain constraints</em>
+</p>
 
-This concludes the demonstration.
+---  
 
-## Additional Information
+For a complete video walkthrough including additional scenarios and detailed explanations, see the [Demo Video](https://drive.google.com/file/d/1brFnYBAC51IwPCIoNh3Bd1s2n_srq8wr/view?usp=sharing).
 
-### Links to Used Tools and Libraries
+---
 
-- [Java 21.0](https://openjdk.org/projects/jdk/21/)
-- [Maven 3.9.5](https://maven.apache.org/)
-- [Python 3.14.2](https://docs.python.org/3/)
-- [Java Security](https://docs.oracle.com/en/java/javase/25/security/java-security-overview1.html)
-- [Virtual Box](https://www.virtualbox.org/)
-- [Docker](https://docs.docker.com/)
-- [PostgreSQL 18.0](https://www.postgresql.org/docs/18/index.html)
+## Security Mechanisms
 
-----
-END OF README
+### Secure Document Format
+
+Each report envelope consists of three layers:
+
+```json
+{
+  "metadata": {
+    "report_id": "abc123",
+    "node_sequence_number": 42,
+    "prev_envelope_hash": "SHA256(previous_envelope)",
+    "signer": {"node_id": "nodeA", "alg": "Ed25519"}
+  },
+  "key_encrypted": {
+    "encryption_algorithm": "RSA-OAEP-SHA256",
+    "key_per_node": [
+      {"node": "nodeA", "encrypted_key": "b64(DEK_wrapped)"},
+      {"node": "nodeB", "encrypted_key": "b64(DEK_wrapped)"}
+    ]
+  },
+  "report_encrypted": {
+    "encryption_algorithm": "AES-256-GCM",
+    "nonce": "b64(12_bytes)",
+    "ciphertext": "b64(...)",
+    "tag": "b64(16_bytes)"
+  }
+}
+```
+
+**Inner Payload (encrypted):**
+```json
+{
+  "report": {/* suspect, description, location */},
+  "signature": "Ed25519(canonical(report) || canonical(metadata))"
+}
+```
+
+### Synchronization Protocol
+
+1. **Node generates reports** → stored encrypted locally with per-sender sequence numbers
+2. **Buffer threshold reached** → compute Merkle root, sign commitment
+3. **Sync request** → server requests buffers from all nodes
+4. **Server verification**:
+   - Verify node signatures on Merkle roots
+   - Recompute Merkle roots from received envelopes
+   - Validate hash chain continuity per sender
+5. **Global ordering** → sort by metadata timestamp
+6. **Block creation** → compute block Merkle root, sign, link to previous block
+7. **Broadcast** → send `SyncResult` with ordered envelopes + block commitment
+8. **Client verification** (6-stage pipeline):
+   - Stage 1: Verify server block signature
+   - Stage 2: Check block chain continuity
+   - Stage 3: Recompute block Merkle root
+   - Stage 4: Verify per-node buffer signatures
+   - Stage 5: Validate per-sender hash chains
+   - Stage 6: Decrypt and verify individual envelopes
+
+Any verification failure triggers immediate rejection and error reporting.
+
+### Cryptographic Primitives
+
+| Operation | Algorithm | Parameters |
+|-----------|-----------|------------|
+| Symmetric encryption | AES-256-GCM | 12-byte nonce, 128-bit tag, metadata as AAD |
+| Key wrapping | RSA-OAEP | SHA-256, MGF1, 2048-bit keys |
+| Digital signatures | Ed25519 | No pre-hashing (internal) |
+| Hash chains | SHA-256 | 256-bit output, hex-encoded |
+| Merkle trees | SHA-256 | Binary tree, leaf=H(envelope), internal=H(left\|\|right) |
+| TLS | TLS 1.3 | mTLS with RSA-2048 certificates |
+
+For detailed security analysis and threat mitigation strategies, consult the [Technical Report](resources/docs/REPORT.md#5-project-development).
+
+---
+
+## Technologies
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Application** | Java 21 | Core application logic |
+| | Spring Boot 3 | Server framework & dependency injection |
+| | gRPC + Protobuf 3 | High-performance RPC with bidirectional streaming |
+| | Gson | JSON processing for envelopes |
+| **Storage** | PostgreSQL 18 | Server-side metadata persistence |
+| | SQLite 3 | Client-side local database |
+| | Filesystem | Encrypted envelope storage |
+| **Security** | Java Cryptography Architecture (JCA) | AES-GCM, RSA-OAEP, Ed25519 |
+| | OpenSSL | Certificate generation & TLS key management |
+| | Java KeyStore (JKS) | Private key protection |
+| **Network** | Docker | PostgreSQL containerization |
+| | iptables | Firewall rules & NAT |
+| | Python 3 + Scapy | Traffic monitoring & IDS |
+| **Build** | Maven 3.9 | Multi-module project management |
+
+---
+
+## Resources
+
+### Documentation
+
+- [Technical Report](resources/docs/REPORT.md) - In-depth implementation analysis (7000+ words)
+- [Project Specification](resources/docs/Project-Specification.md) - Official course requirements
+- [Project Scenarios](resources/docs/Project-Scenarios.md) - DeathNode scenario description
+- [Demo Video](https://drive.google.com/file/d/1brFnYBAC51IwPCIoNh3Bd1s2n_srq8wr/view?usp=sharing) - Full system demonstration
+
+### External References
+
+- [Java Security Overview](https://docs.oracle.com/en/java/javase/21/security/java-security-overview1.html)
+- [gRPC Java Documentation](https://grpc.io/docs/languages/java/)
+- [PostgreSQL SSL Documentation](https://www.postgresql.org/docs/18/ssl-tcp.html)
+- [NIST AES-GCM Specification](https://nvlpubs.nist.gov/nistpubs/legacy/sp/nistspecialpublication800-38d.pdf)
+- [Ed25519 Signature Scheme](https://ed25519.cr.yp.to/)
+
+---
+
+## Authors
+
+| <div align="center"><a href="https://github.com/tomasf18"><img src="https://avatars.githubusercontent.com/u/122024767?v=4" width="150px;" alt="Tomás Santos"/></a><br/><strong>Tomás Santos</strong><br/>116122<br/></div> | <div align="center"><a href="https://github.com/pedropmad"><img src="https://avatars.githubusercontent.com/u/163666619?v=4" width="150px;" alt="Pedro Duarte"/></a><br/><strong>Pedro Duarte</strong><br/>116390<br/></div> | <div align="center"><img src="https://avatars.githubusercontent.com/u/163666619?v=4" width="150px;" alt="Guilherme Pais"/></a><br/><strong>Guilherme Pais</strong><br/>116496<br/></div> |
+| --- | --- | --- |
+
+---
+
+<div align="center">
+
+**Instituto Superior Técnico** • **Network and Computer Security** • **2025/2026**
+
+</div>
