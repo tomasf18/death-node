@@ -209,8 +209,8 @@ sudo apt install -y ca-certificates curl gnupg lsb-release git
 #### 2. Clone the Project
 
 ```sh
-git clone https://github.com/tecnico-sec/A53-DeathNode.git
-cd A53-DeathNode/deathnode-network
+git clone git@github.com:tomasf18/death-node.git
+cd death-node/deathnode-network
 ```
 
 #### 3. Install Dependencies
